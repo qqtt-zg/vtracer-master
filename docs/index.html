@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VTracer - 矢量化引擎</title>
+    <link rel="apple-touch-icon" sizes="192x192" href="./assets/apple-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="./assets/apple-icon.png">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+:root {
+    --bg-deep: #060b14;
+    --bg-surface: #0d1b2a;
+    --bg-panel: #0a1628;
+    --cyan: #00e5ff;
+    --cyan-dim: rgba(0,229,255,0.15);
+    --cyan-glow: rgba(0,229,255,0.4);
+    --blue-deep: #0a3d62;
+    --orange: #ff5722;
+    --text: #e0e6ed;
+    --text-dim: #7a8fa6;
+    --border: rgba(0,229,255,0.12);
+    --radius: 6px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; }
+body {
+    font-family: 'Noto Sans SC', sans-serif;
+    background: var(--bg-deep);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+}
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+        linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+    z-index: 0;
+    animation: gridPulse 8s ease-in-out infinite;
+}
+@keyframes gridPulse { 0%,100%{opacity:.6} 50%{opacity:1} }
+body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,229,255,0.008) 2px,rgba(0,229,255,0.008) 4px);
+    pointer-events: none;
+    z-index: 9999;
+}
+.topbar {
+    position: relative; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px;
+    background: linear-gradient(180deg, rgba(10,22,40,0.95), rgba(6,11,20,0.9));
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(10px); flex-shrink: 0;
+}
+.topbar::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cyan-glow), transparent);
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-name {
+    font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 20px;
+    letter-spacing: 3px; color: var(--cyan); text-shadow: 0 0 20px var(--cyan-glow);
+}
+.brand-tag {
+    font-size: 11px; color: var(--text-dim);
+    border: 1px solid var(--border); padding: 2px 8px; border-radius: 3px; letter-spacing: 1px;
+}
+.topbar-actions { display: flex; align-items: center; gap: 12px; }
+.btn {
+    font-family: 'Noto Sans SC', sans-serif; font-size: 13px; font-weight: 500;
+    padding: 8px 18px; border-radius: var(--radius); border: 1px solid var(--border);
+    background: transparent; color: var(--text); cursor: pointer; transition: all 0.2s;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+}
+.btn:hover { border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 12px var(--cyan-dim); }
+.btn-primary {
+    background: linear-gradient(135deg, rgba(0,229,255,0.15), rgba(0,229,255,0.05));
+    border-color: var(--cyan); color: var(--cyan);
+}
+.btn-primary:hover {
+    background: linear-gradient(135deg, rgba(0,229,255,0.3), rgba(0,229,255,0.1));
+    box-shadow: 0 0 20px var(--cyan-dim), inset 0 0 20px var(--cyan-dim);
+}
+.main { position: relative; z-index: 1; display: flex; flex: 1; overflow: hidden; }
+.preview-area { flex: 1; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+#drop {
+    flex: 1; position: relative; overflow: hidden; cursor: grab;
+    background: radial-gradient(ellipse at center, rgba(10,61,98,0.12) 0%, transparent 70%);
+}
+#drop:active { cursor: grabbing; }
+.viewport-content { position: absolute; transform-origin: 0 0; pointer-events: none; }
+#canvas-container { position: relative; display: block; pointer-events: auto; }
+#frame { display: block; max-width: none; min-height: 1px; }
+#svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: auto; shape-rendering: geometricPrecision; }
+#svg > path:hover { stroke: var(--orange); stroke-width: 1px; }
+</style>
+</head>
+<body>
+<style>
+.dropzone {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px;
+    border: 2px dashed var(--border); margin: 20px; border-radius: 12px; transition: all 0.3s;
+    z-index: 50;
+}
+.dropzone.hovering { border-color: var(--cyan); background: var(--cyan-dim); box-shadow: inset 0 0 60px var(--cyan-dim); }
+.dropzone.hidden { display: none; }
+.dropzone-icon {
+    width: 64px; height: 64px; border: 2px solid var(--cyan); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; animation: breathe 3s ease-in-out infinite;
+}
+@keyframes breathe { 0%,100%{box-shadow:0 0 10px var(--cyan-dim)} 50%{box-shadow:0 0 30px var(--cyan-glow)} }
+.dropzone-icon svg { width: 28px; height: 28px; stroke: var(--cyan); fill: none; }
+.dropzone-text { color: var(--text-dim); font-size: 14px; }
+.dropzone-text a { color: var(--cyan); text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s; }
+.dropzone-text a:hover { border-bottom-color: var(--cyan); }
+.zoom-bar {
+    display: flex; align-items: center; gap: 10px; padding: 8px 16px;
+    background: var(--bg-panel); border-top: 1px solid var(--border); flex-shrink: 0;
+}
+.zoom-bar .btn { padding: 5px 10px; font-size: 12px; }
+.zoom-percent { font-family: 'Orbitron', sans-serif; font-size: 12px; color: var(--cyan); min-width: 52px; text-align: center; }
+.zoom-slider {
+    flex: 1; max-width: 200px; -webkit-appearance: none; appearance: none;
+    height: 3px; background: var(--border); border-radius: 2px; outline: none;
+}
+.zoom-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--cyan); box-shadow: 0 0 8px var(--cyan-glow); cursor: pointer;
+}
+.progress-ring { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 100; display: none; }
+.progress-ring.active { display: block; }
+.progress-ring svg { transform: rotate(-90deg); }
+.progress-ring circle { fill: none; stroke-width: 4; }
+.progress-ring .track { stroke: var(--border); }
+.progress-ring .fill { stroke: var(--cyan); stroke-linecap: round; transition: stroke-dashoffset 0.3s; filter: drop-shadow(0 0 6px var(--cyan-glow)); }
+.progress-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-family: 'Orbitron', sans-serif; font-size: 14px; color: var(--cyan); }
+.panel {
+    width: 320px; flex-shrink: 0; background: var(--bg-panel); border-left: 1px solid var(--border);
+    overflow-y: auto; padding: 20px 16px; display: flex; flex-direction: column; gap: 16px; position: relative; z-index: 10;
+}
+.panel::-webkit-scrollbar { width: 4px; }
+.panel::-webkit-scrollbar-track { background: transparent; }
+.panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.panel-section { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; animation: fadeIn 0.4s ease both; }
+.panel-section:nth-child(2) { animation-delay: 0.1s; }
+.panel-section:nth-child(3) { animation-delay: 0.2s; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+.panel-header {
+    display: flex; align-items: center; justify-content: space-between; padding: 10px 14px;
+    background: rgba(0,229,255,0.03); cursor: pointer; user-select: none; transition: background 0.2s;
+}
+.panel-header:hover { background: rgba(0,229,255,0.06); }
+.panel-header h3 { font-size: 13px; font-weight: 500; letter-spacing: 0.5px; color: var(--text); }
+.panel-header .chevron { width: 16px; height: 16px; stroke: var(--text-dim); transition: transform 0.3s; }
+.panel-section.collapsed .panel-body { display: none; }
+.panel-section.collapsed .chevron { transform: rotate(-90deg); }
+.panel-body { padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+.btn-group { display: flex; gap: 2px; background: rgba(0,0,0,0.3); border-radius: var(--radius); padding: 3px; }
+.btn-group .btn-opt {
+    flex: 1; padding: 7px 10px; font-size: 12px; font-weight: 500; text-align: center;
+    border: none; border-radius: 4px; background: transparent; color: var(--text-dim);
+    cursor: pointer; transition: all 0.2s; font-family: 'Noto Sans SC', sans-serif;
+}
+.btn-group .btn-opt:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+.btn-group .btn-opt.selected { background: linear-gradient(135deg, rgba(0,229,255,0.2), rgba(0,229,255,0.08)); color: var(--cyan); box-shadow: 0 0 10px var(--cyan-dim); }
+.slider-control { display: flex; flex-direction: column; gap: 6px; }
+.slider-label { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+.slider-label span { color: var(--text-dim); }
+.slider-label .val { font-family: 'Orbitron', sans-serif; font-size: 11px; color: var(--cyan); min-width: 28px; text-align: right; }
+.slider-wrap input[type=range] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 4px;
+    background: linear-gradient(90deg, var(--cyan-dim), var(--border)); border-radius: 2px; outline: none; cursor: pointer;
+}
+.slider-wrap input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--bg-deep); border: 2px solid var(--cyan); box-shadow: 0 0 8px var(--cyan-glow); cursor: pointer;
+}
+.slider-wrap input[type=range]::-moz-range-thumb {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--bg-deep); border: 2px solid var(--cyan); box-shadow: 0 0 8px var(--cyan-glow); cursor: pointer;
+}
+.gallery { padding: 10px 16px; background: var(--bg-panel); border-top: 1px solid var(--border); flex-shrink: 0; position: relative; z-index: 10; }
+.gallery-scroll { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.gallery-scroll::-webkit-scrollbar { height: 4px; }
+.gallery-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.gallery-item {
+    flex-shrink: 0; width: 80px; height: 56px; border-radius: 4px; overflow: hidden;
+    border: 1px solid var(--border); cursor: pointer; transition: all 0.25s; position: relative;
+}
+.gallery-item:hover { border-color: var(--cyan); box-shadow: 0 0 12px var(--cyan-dim); transform: translateY(-2px); }
+.gallery-item img { width: 100%; height: 100%; object-fit: cover; }
+</style>
+
+<input type="file" id="imageInput" accept="image/*" style="display:none">
+
+<!-- Top Bar -->
+<div class="topbar">
+    <div class="brand">
+        <span class="brand-name">VTRACER</span>
+        <span class="brand-tag">v0.6 矢量引擎</span>
+    </div>
+    <div class="topbar-actions">
+        <a class="btn" href="https://github.com/visioncortex/vtracer" target="_blank">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+            GitHub
+        </a>
+        <a id="export" class="btn btn-primary" href="#">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            导出 SVG
+        </a>
+        <a id="exportPdf" class="btn btn-primary" href="#" style="margin-left:8px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            导出 PDF
+        </a>
+    </div>
+</div>
+
+<!-- Main Content -->
+<div class="main">
+    <div class="preview-area">
+        <!-- Viewport -->
+        <div id="drop">
+            <div class="viewport-content" id="viewportContent">
+                <div id="canvas-container">
+                    <canvas id="frame"></canvas>
+                    <svg id="svg" version="1.1" xmlns="http://www.w3.org/2000/svg"></svg>
+                </div>
+            </div>
+            <!-- Drop Zone -->
+            <div class="dropzone" id="droptext">
+                <div class="dropzone-icon">
+                    <svg viewBox="0 0 24 24" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                </div>
+                <p class="dropzone-text">拖拽图片到此处，Ctrl+V 粘贴，或 <a href="#" id="imageSelect">选择文件</a></p>
+            </div>
+            <!-- Progress Ring -->
+            <div class="progress-ring" id="progressRing">
+                <svg width="80" height="80">
+                    <circle class="track" cx="40" cy="40" r="34"/>
+                    <circle class="fill" id="progressCircle" cx="40" cy="40" r="34" stroke-dasharray="213.6" stroke-dashoffset="213.6"/>
+                </svg>
+                <span class="progress-text" id="progressText">0%</span>
+            </div>
+        </div>
+        <!-- Hidden progress bar for compatibility -->
+        <div id="progressregion" style="display:none"><progress id="progressbar" value="0" max="100"></progress></div>
+        <!-- Zoom Bar -->
+        <div class="zoom-bar">
+            <button class="btn" id="zoomFit">适应</button>
+            <button class="btn" id="zoomReset">1:1</button>
+            <input type="range" class="zoom-slider" id="zoomSlider" min="10" max="2000" value="100">
+            <span class="zoom-percent" id="zoomPercent">100%</span>
+        </div>
+        <!-- Gallery -->
+        <div class="gallery">
+            <div class="gallery-scroll" id="galleryslider"></div>
+        </div>
+    </div>
+
+    <!-- Side Panel -->
+    <div class="panel" id="options">
+        <div class="panel-section">
+            <div class="panel-header" onclick="this.parentElement.classList.toggle('collapsed')">
+                <h3>聚类模式</h3>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            <div class="panel-body">
+                <div class="btn-group">
+                    <button class="btn-opt" id="clustering-binary">黑白</button>
+                    <button class="btn-opt selected" id="clustering-color">彩色</button>
+                </div>
+                <div class="btn-group clustering-color-options">
+                    <button class="btn-opt" id="clustering-cutout">剪切</button>
+                    <button class="btn-opt selected" id="clustering-stacked">堆叠</button>
+                </div>
+                <div class="slider-control">
+                    <div class="slider-label"><span>噪点过滤</span><span class="val" id="filterspecklevalue">4</span></div>
+                    <div class="slider-wrap"><input type="range" id="filterspeckle" min="0" max="128" step="1" value="4"></div>
+                </div>
+                <div class="slider-control clustering-color-options">
+                    <div class="slider-label"><span>颜色精度</span><span class="val" id="colorprecisionvalue">6</span></div>
+                    <div class="slider-wrap"><input type="range" id="colorprecision" min="1" max="8" step="1" value="6"></div>
+                </div>
+                <div class="slider-control clustering-color-options">
+                    <div class="slider-label"><span>渐变步长</span><span class="val" id="layerdifferencevalue">16</span></div>
+                    <div class="slider-wrap"><input type="range" id="layerdifference" min="0" max="128" step="1" value="16"></div>
+                </div>
+            </div>
+        </div>
+        <div class="panel-section">
+            <div class="panel-header" onclick="this.parentElement.classList.toggle('collapsed')">
+                <h3>路径拟合</h3>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            <div class="panel-body">
+                <div class="btn-group">
+                    <button class="btn-opt" id="none">像素</button>
+                    <button class="btn-opt" id="polygon">多边形</button>
+                    <button class="btn-opt selected" id="spline">样条曲线</button>
+                </div>
+                <div class="slider-control spline-options">
+                    <div class="slider-label"><span>角点阈值</span><span class="val" id="cornervalue">60</span></div>
+                    <div class="slider-wrap"><input type="range" id="corner" min="0" max="180" step="1" value="60"></div>
+                </div>
+                <div class="slider-control spline-options">
+                    <div class="slider-label"><span>线段长度</span><span class="val" id="lengthvalue">4</span></div>
+                    <div class="slider-wrap"><input type="range" id="length" min="3.5" max="10" step="0.5" value="4"></div>
+                </div>
+                <div class="slider-control spline-options">
+                    <div class="slider-label"><span>拼接阈值</span><span class="val" id="splicevalue">45</span></div>
+                    <div class="slider-wrap"><input type="range" id="splice" min="0" max="180" step="1" value="45"></div>
+                </div>
+                <div style="display:none">
+                    <input type="range" id="pathprecision" min="0" max="16" step="1" value="8">
+                    <span id="pathprecisionvalue">8</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div id="credits-modal" style="display:none"><div id="credits-modal-content"></div></div>
+
+<script>
+(function() {
+    // Zoom & Pan state
+    let scale = 1, panX = 0, panY = 0, isPanning = false, startX = 0, startY = 0;
+    const viewport = document.getElementById('drop');
+    const content = document.getElementById('viewportContent');
+    const zoomSlider = document.getElementById('zoomSlider');
+    const zoomPercent = document.getElementById('zoomPercent');
+    const progressRing = document.getElementById('progressRing');
+    const progressCircle = document.getElementById('progressCircle');
+    const progressTextEl = document.getElementById('progressText');
+    const circumference = 2 * Math.PI * 34;
+
+    function updateTransform() {
+        content.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+        zoomSlider.value = Math.round(scale * 100);
+        zoomPercent.textContent = Math.round(scale * 100) + '%';
+    }
+
+    function zoomTo(newScale, cx, cy) {
+        const oldScale = scale;
+        newScale = Math.max(0.1, Math.min(20, newScale));
+        const rect = viewport.getBoundingClientRect();
+        cx = cx !== undefined ? cx : rect.width / 2;
+        cy = cy !== undefined ? cy : rect.height / 2;
+        panX = cx - (cx - panX) * (newScale / oldScale);
+        panY = cy - (cy - panY) * (newScale / oldScale);
+        scale = newScale;
+        updateTransform();
+    }
+
+    // Mouse wheel zoom
+    viewport.addEventListener('wheel', function(e) {
+        e.preventDefault();
+        const rect = viewport.getBoundingClientRect();
+        const cx = e.clientX - rect.left;
+        const cy = e.clientY - rect.top;
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        zoomTo(scale * delta, cx, cy);
+    }, {passive: false});
+
+    // Pan with middle mouse or left mouse when not on dropzone
+    viewport.addEventListener('mousedown', function(e) {
+        if (e.target.closest('.dropzone') || e.target.closest('a')) return;
+        isPanning = true;
+        startX = e.clientX - panX;
+        startY = e.clientY - panY;
+        viewport.style.cursor = 'grabbing';
+        e.preventDefault();
+    });
+    document.getElementById('canvas-container').addEventListener('mousedown', function(e) {
+        isPanning = true;
+        startX = e.clientX - panX;
+        startY = e.clientY - panY;
+        viewport.style.cursor = 'grabbing';
+        e.preventDefault();
+    });
+    document.addEventListener('mousemove', function(e) {
+        if (!isPanning) return;
+        panX = e.clientX - startX;
+        panY = e.clientY - startY;
+        updateTransform();
+    });
+    document.addEventListener('mouseup', function() {
+        isPanning = false;
+        viewport.style.cursor = 'grab';
+    });
+
+    // Touch pinch zoom
+    let lastTouchDist = 0;
+    viewport.addEventListener('touchstart', function(e) {
+        if (e.touches.length === 2) {
+            lastTouchDist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+        } else if (e.touches.length === 1 && !e.target.closest('.dropzone')) {
+            isPanning = true;
+            startX = e.touches[0].clientX - panX;
+            startY = e.touches[0].clientY - panY;
+        }
+    });
+    viewport.addEventListener('touchmove', function(e) {
+        if (e.touches.length === 2) {
+            e.preventDefault();
+            const dist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            if (lastTouchDist > 0) {
+                const delta = dist / lastTouchDist;
+                const rect = viewport.getBoundingClientRect();
+                const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+                const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+                zoomTo(scale * delta, cx, cy);
+            }
+            lastTouchDist = dist;
+        } else if (isPanning && e.touches.length === 1) {
+            panX = e.touches[0].clientX - startX;
+            panY = e.touches[0].clientY - startY;
+            updateTransform();
+        }
+    }, {passive: false});
+    viewport.addEventListener('touchend', function() { isPanning = false; lastTouchDist = 0; });
+
+    // Zoom controls
+    zoomSlider.addEventListener('input', function() { zoomTo(this.value / 100); });
+    document.getElementById('zoomFit').addEventListener('click', function() {
+        const container = document.getElementById('canvas-container');
+        const vw = viewport.clientWidth, vh = viewport.clientHeight;
+        const cw = container.offsetWidth || 400, ch = container.offsetHeight || 300;
+        const fitScale = Math.min(vw / cw, vh / ch) * 0.9;
+        scale = Math.max(fitScale, 0.5);
+        panX = (vw - cw * scale) / 2;
+        panY = (vh - ch * scale) / 2;
+        updateTransform();
+    });
+    document.getElementById('zoomReset').addEventListener('click', function() {
+        scale = 1; panX = 0; panY = 0; updateTransform();
+    });
+
+    // Progress ring - poll the hidden progressbar
+    const progressbar = document.getElementById('progressbar');
+    const progressregion = document.getElementById('progressregion');
+    let lastProgressVal = -1;
+    setInterval(function() {
+        const val = progressbar.value;
+        const max = progressbar.max;
+        const visible = progressregion.style.display !== 'none';
+        if (val !== lastProgressVal || visible !== progressRing.classList.contains('active')) {
+            lastProgressVal = val;
+            const pct = Math.round((val / max) * 100);
+            const offset = circumference - (val / max) * circumference;
+            progressCircle.style.strokeDashoffset = offset;
+            progressTextEl.textContent = pct + '%';
+            if (visible) {
+                progressRing.classList.add('active');
+            } else {
+                progressRing.classList.remove('active');
+            }
+        }
+    }, 50);
+
+    // Style gallery items injected by the bundle
+    const galleryObserver = new MutationObserver(function() {
+        document.querySelectorAll('#galleryslider li').forEach(function(li) {
+            li.style.cssText = 'list-style:none;display:inline-block;';
+            var div = li.querySelector('.galleryitem');
+            if (div && !div.classList.contains('styled')) {
+                div.classList.add('styled');
+                div.style.cssText = 'width:80px;height:56px;border-radius:4px;overflow:hidden;border:1px solid rgba(0,229,255,0.12);cursor:pointer;transition:all 0.25s;flex-shrink:0;display:inline-block;';
+                var img = div.querySelector('img');
+                if (img) img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+            }
+        });
+    });
+    var gs = document.getElementById('galleryslider');
+    if (gs) galleryObserver.observe(gs, {childList: true, subtree: true});
+
+    // Intercept canvas display:none to use visibility:hidden instead (preserves layout for SVG overlay)
+    const frame = document.getElementById('frame');
+    const canvasObserver = new MutationObserver(function() {
+        if (frame.style.display === 'none') {
+            frame.style.display = 'block';
+            frame.style.visibility = 'hidden';
+        } else if (frame.style.display === 'block' || frame.style.display === '') {
+            frame.style.visibility = 'visible';
+        }
+    });
+    canvasObserver.observe(frame, {attributes: true, attributeFilter: ['style']});
+
+    // Override canvas-container sizing: bundle sets percentage width/marginBottom for responsive layout,
+    // but we need pixel dimensions for the zoom/pan viewport
+    const canvasContainer = document.getElementById('canvas-container');
+    const containerObserver = new MutationObserver(function() {
+        if (frame.width && frame.height) {
+            canvasContainer.style.width = frame.width + 'px';
+            canvasContainer.style.height = frame.height + 'px';
+            canvasContainer.style.marginBottom = '0';
+            // Auto-fit after image loads
+            const vw = viewport.clientWidth, vh = viewport.clientHeight;
+            const cw = frame.width, ch = frame.height;
+            const fitScale = Math.min(vw / cw, vh / ch) * 0.9;
+            scale = Math.max(fitScale, 0.5);
+            panX = (vw - cw * scale) / 2;
+            panY = (vh - ch * scale) / 2;
+            updateTransform();
+        }
+    });
+    containerObserver.observe(canvasContainer, {attributes: true, attributeFilter: ['style']});
+})();
+</script>
+<script src="./jspdf.umd.min.js"></script>
+<script src="./svg2pdf.umd.min.js"></script>
+<script>
+document.getElementById('exportPdf').addEventListener('click', function(e) {
+    e.preventDefault();
+    const svgEl = document.getElementById('svg');
+    if (!svgEl.children.length) return;
+
+    const vb = svgEl.getAttribute('viewBox');
+    if (!vb) return;
+    const [, , w, h] = vb.split(/\s+/).map(Number);
+
+    const pxPerPt = 72 / 96;
+    const pdfW = w * pxPerPt;
+    const pdfH = h * pxPerPt;
+    const orientation = pdfW > pdfH ? 'l' : 'p';
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({orientation: orientation, unit: 'pt', format: [pdfW, pdfH]});
+
+    const clone = svgEl.cloneNode(true);
+    clone.setAttribute('width', w);
+    clone.setAttribute('height', h);
+
+    pdf.svg(clone, {x: 0, y: 0, width: pdfW, height: pdfH}).then(function() {
+        pdf.save('vtracer-export-' + new Date().toISOString().slice(0,10) + '.pdf');
+    });
+});
+</script>
+<script src="./bootstrap.js"></script>
+</body>
+</html>

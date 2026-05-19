@@ -1,0 +1,13 @@
+{
+  "id": "session-1779100429318",
+  "startedAt": "2026-05-18T10:33:49.318Z",
+  "platform": "win32",
+  "cwd": "I:\\迅雷下载\\vtracer-master",
+  "context": {},
+  "metrics": {
+    "edits": 0,
+    "commands": 0,
+    "tasks": 0,
+    "errors": 0
+  }
+}

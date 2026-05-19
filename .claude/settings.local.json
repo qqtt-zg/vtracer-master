@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rustc --version)",
+      "Bash(cargo --version)",
+      "PowerShell(rustc *)",
+      "PowerShell(Test-Path *)",
+      "PowerShell(pip *)",
+      "PowerShell(python -c \"import vtracer; print\\('vtracer imported successfully'\\); print\\(dir\\(vtracer\\)\\)\")",
+      "PowerShell($f = Get-Item \"I:\\\\迅雷下载\\\\vtracer-master\\\\output_test.svg\"; Write-Output \"文件大小: $\\([math]::Round\\($f.Length / 1KB, 1\\)\\) KB\")",
+      "PowerShell(Start-Process python -ArgumentList \"-m\", \"http.server\", \"8080\", \"--directory\", \"I:\\\\迅雷下载\\\\vtracer-master\\\\docs\" -NoNewWindow; Write-Output \"服务已启动: http://localhost:8080\")",
+      "Skill(frontend-design)",
+      "mcp__chrome-devtools__navigate_page",
+      "mcp__chrome-devtools__take_screenshot",
+      "mcp__chrome-devtools__list_console_messages",
+      "mcp__chrome-devtools__take_snapshot",
+      "mcp__chrome-devtools__click",
+      "mcp__chrome-devtools__wait_for",
+      "mcp__chrome-devtools__evaluate_script",
+      "PowerShell(Get-Process *)",
+      "PowerShell(Start-Process python -ArgumentList \"-m\", \"http.server\", \"8080\", \"--directory\", \"I:\\\\迅雷下载\\\\vtracer-master\\\\docs\" -WindowStyle Hidden)",
+      "PowerShell(Start-Sleep -Seconds 1; \\(New-Object System.Net.WebClient\\).DownloadString\\(\"http://localhost:8080\"\\) | Select-Object -First 1)",
+      "mcp__chrome-devtools__list_network_requests",
+      "PowerShell(Invoke-WebRequest -Uri \"https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js\" -OutFile \"I:\\\\迅雷下载\\\\vtracer-master\\\\docs\\\\jspdf.umd.min.js\")",
+      "PowerShell(Get-Item *)",
+      "PowerShell(Invoke-WebRequest -Uri \"https://unpkg.com/svg2pdf.js@2.2.4/dist/svg2pdf.umd.min.js\" -OutFile \"I:\\\\迅雷下载\\\\vtracer-master\\\\docs\\\\svg2pdf.umd.min.js\")"
+    ]
+  }
+}
