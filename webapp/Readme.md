@@ -1,42 +1,44 @@
-<div align="center">
+﻿<div align="center">
   <img src="https://github.com/visioncortex/vtracer/raw/master/docs/images/visioncortex-banner.png">
 </div>
 
-# visioncortex VTracer
+# visioncortex VTracer Web 应用
 
-A web app to convert raster images into vector graphics.
+这是一个将位图图像转换为矢量图的 Web 应用。
 
-## Setup
+## 环境准备
 
-0. `sudo apt install git build-essential`
-1. https://www.rust-lang.org/tools/install
-2. https://rustwasm.github.io/wasm-pack/installer/
-3. https://github.com/nvm-sh/nvm
-```
-nvm install --lts
-```
+1. 安装 Rust：https://www.rust-lang.org/tools/install
+2. 安装 wasm-pack：https://rustwasm.github.io/wasm-pack/installer/
+3. 安装 Node.js（建议 LTS 版本）
 
-## Getting Started
+## 快速开始
 
-0. Setup
-```
+1. 安装前端依赖
+
+```sh
 cd app
 npm install
 ```
 
-1. Build wasm
-```
+2. 构建 wasm 包
+
+```sh
+cd ..
 wasm-pack build
 ```
 
-2. Start development server
-```
+3. 启动开发服务器
+
+```sh
 cd app
 npm run start
 ```
-Open browser on http://localhost:8080/
 
-3. Release
-```
+浏览器访问：`http://localhost:8080/`
+
+4. 构建生产包
+
+```sh
 npm run build
 ```

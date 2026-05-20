@@ -13,20 +13,20 @@ fn path_simplify_mode_from_str(s: &str) -> PathSimplifyMode {
         "polygon" => PathSimplifyMode::Polygon,
         "spline" => PathSimplifyMode::Spline,
         "none" => PathSimplifyMode::None,
-        _ => panic!("unknown PathSimplifyMode {}", s),
+        _ => panic!("未知的路径简化模式: {}", s),
     }
 }
 
 pub fn config_from_args() -> (PathBuf, PathBuf, Config) {
     let app = App::new("visioncortex VTracer ".to_owned() + env!("CARGO_PKG_VERSION"))
-        .about("A cmd app to convert images into vector graphics.");
+        .about("将位图图像转换为矢量图形（SVG）的命令行工具。");
 
     let app = app.arg(
         Arg::with_name("input")
             .long("input")
             .short("i")
             .takes_value(true)
-            .help("Path to input raster image")
+            .help("输入位图图像路径")
             .required(true),
     );
 
@@ -35,7 +35,7 @@ pub fn config_from_args() -> (PathBuf, PathBuf, Config) {
             .long("output")
             .short("o")
             .takes_value(true)
-            .help("Path to output vector graphics")
+            .help("输出矢量图（SVG）路径")
             .required(true),
     );
 
@@ -43,7 +43,7 @@ pub fn config_from_args() -> (PathBuf, PathBuf, Config) {
         Arg::with_name("color_mode")
             .long("colormode")
             .takes_value(true)
-            .help("True color image `color` (default) or Binary image `bw`"),
+            .help("颜色模式：`color`（默认，彩色）或 `bw`（黑白）"),
     );
 
     let app = app.arg(
@@ -51,8 +51,7 @@ pub fn config_from_args() -> (PathBuf, PathBuf, Config) {
             .long("hierarchical")
             .takes_value(true)
             .help(
-                "Hierarchical clustering `stacked` (default) or non-stacked `cutout`. \
-            Only applies to color mode. ",
+                "分层聚类：`stacked`（默认，叠层）或 `cutout`（非叠层）。仅在彩色模式下生效。",
             ),
     );
 
@@ -60,7 +59,7 @@ pub fn config_from_args() -> (PathBuf, PathBuf, Config) {
         Arg::with_name("preset")
             .long("preset")
             .takes_value(true)
-            .help("Use one of the preset configs `bw`, `poster`, `photo`"),
+            .help("使用预设配置：`bw`、`poster`、`photo`"),
     );
 
     let app = app.arg(
@@ -68,7 +67,7 @@ pub fn config_from_args() -> (PathBuf, PathBuf, Config) {
             .long("filter_speckle")
             .short("f")
             .takes_value(true)
-            .help("Discard patches smaller than X px in size"),
+            .help("过滤面积小于 X 像素的色块"),
     );
 
     let app = app.arg(
@@ -76,7 +75,7 @@ pub fn config_from_args() -> (PathBuf, PathBuf, Config) {
             .long("color_precision")
             .short("p")
             .takes_value(true)
-            .help("Number of significant bits to use in an RGB channel"),
+            .help("每个 RGB 通道保留的有效位数"),
     );
 
     let app = app.arg(
@@ -84,7 +83,7 @@ pub fn config_from_args() -> (PathBuf, PathBuf, Config) {
             .long("gradient_step")
             .short("g")
             .takes_value(true)
-            .help("Color difference between gradient layers"),
+            .help("渐变层之间的颜色差值"),
     );
 
     let app = app.arg(
@@ -92,21 +91,21 @@ pub fn config_from_args() -> (PathBuf, PathBuf, Config) {
             .long("corner_threshold")
             .short("c")
             .takes_value(true)
-            .help("Minimum momentary angle (degree) to be considered a corner"),
+            .help("判定为拐角的最小瞬时角度（度）"),
     );
 
     let app = app.arg(Arg::with_name("segment_length")
         .long("segment_length")
         .short("l")
         .takes_value(true)
-        .help("Perform iterative subdivide smooth until all segments are shorter than this length"));
+        .help("迭代细分平滑，直到所有线段长度都小于该值"));
 
     let app = app.arg(
         Arg::with_name("splice_threshold")
             .long("splice_threshold")
             .short("s")
             .takes_value(true)
-            .help("Minimum angle displacement (degree) to splice a spline"),
+            .help("样条切分所需的最小角位移（度）"),
     );
 
     let app = app.arg(
@@ -114,14 +113,14 @@ pub fn config_from_args() -> (PathBuf, PathBuf, Config) {
             .long("mode")
             .short("m")
             .takes_value(true)
-            .help("Curver fitting mode `pixel`, `polygon`, `spline`"),
+            .help("曲线拟合模式：`pixel`、`polygon`、`spline`"),
     );
 
     let app = app.arg(
         Arg::with_name("path_precision")
             .long("path_precision")
             .takes_value(true)
-            .help("Number of decimal places to use in path string"),
+            .help("SVG 路径小数位精度"),
     );
 
     // Extract matches
@@ -130,10 +129,10 @@ pub fn config_from_args() -> (PathBuf, PathBuf, Config) {
     let mut config = Config::default();
     let input_path = matches
         .value_of("input")
-        .expect("Input path is required, please specify it by --input or -i.");
+            .expect("必须提供输入路径，请使用 --input 或 -i 指定。");
     let output_path = matches
         .value_of("output")
-        .expect("Output path is required, please specify it by --output or -o.");
+            .expect("必须提供输出路径，请使用 --output 或 -o 指定。");
 
     let input_path = PathBuf::from(input_path);
     let output_path = PathBuf::from(output_path);
@@ -164,7 +163,7 @@ pub fn config_from_args() -> (PathBuf, PathBuf, Config) {
         } else if value == "spline" {
             "spline"
         } else {
-            panic!("Parser Error: Curve fitting mode is invalid: {}", value);
+            panic!("参数解析错误：无效的曲线拟合模式: {}", value);
         });
     }
 
@@ -173,12 +172,12 @@ pub fn config_from_args() -> (PathBuf, PathBuf, Config) {
             // is numeric
             let value = value.trim().parse::<usize>().unwrap();
             if value > 16 {
-                panic!("Out of Range Error: Filter speckle is invalid at {}. It must be within [0,16].", value);
+                panic!("范围错误：filter_speckle={} 无效，必须在 [0,16] 范围内。", value);
             }
             config.filter_speckle = value;
         } else {
             panic!(
-                "Parser Error: Filter speckle is not a positive integer: {}.",
+                "参数解析错误：filter_speckle 不是正整数: {}。",
                 value
             );
         }
@@ -189,12 +188,12 @@ pub fn config_from_args() -> (PathBuf, PathBuf, Config) {
             // is numeric
             let value = value.trim().parse::<i32>().unwrap();
             if value < 1 || value > 8 {
-                panic!("Out of Range Error: Color precision is invalid at {}. It must be within [1,8].", value);
+                panic!("范围错误：color_precision={} 无效，必须在 [1,8] 范围内。", value);
             }
             config.color_precision = value;
         } else {
             panic!(
-                "Parser Error: Color precision is not an integer: {}.",
+                "参数解析错误：color_precision 不是整数: {}。",
                 value
             );
         }
@@ -205,11 +204,11 @@ pub fn config_from_args() -> (PathBuf, PathBuf, Config) {
             // is numeric
             let value = value.trim().parse::<i32>().unwrap();
             if value < 0 || value > 255 {
-                panic!("Out of Range Error: Gradient step is invalid at {}. It must be within [0,255].", value);
+                panic!("范围错误：gradient_step={} 无效，必须在 [0,255] 范围内。", value);
             }
             config.layer_difference = value;
         } else {
-            panic!("Parser Error: Gradient step is not an integer: {}.", value);
+            panic!("参数解析错误：gradient_step 不是整数: {}。", value);
         }
     }
 
@@ -218,11 +217,11 @@ pub fn config_from_args() -> (PathBuf, PathBuf, Config) {
             // is numeric
             let value = value.trim().parse::<i32>().unwrap();
             if value < 0 || value > 180 {
-                panic!("Out of Range Error: Corner threshold is invalid at {}. It must be within [0,180].", value);
+                panic!("范围错误：corner_threshold={} 无效，必须在 [0,180] 范围内。", value);
             }
             config.corner_threshold = value
         } else {
-            panic!("Parser Error: Corner threshold is not numeric: {}.", value);
+            panic!("参数解析错误：corner_threshold 不是数字: {}。", value);
         }
     }
 
@@ -231,11 +230,11 @@ pub fn config_from_args() -> (PathBuf, PathBuf, Config) {
             // is numeric
             let value = value.trim().parse::<f64>().unwrap();
             if value < 3.5 || value > 10.0 {
-                panic!("Out of Range Error: Segment length is invalid at {}. It must be within [3.5,10].", value);
+                panic!("范围错误：segment_length={} 无效，必须在 [3.5,10] 范围内。", value);
             }
             config.length_threshold = value;
         } else {
-            panic!("Parser Error: Segment length is not numeric: {}.", value);
+            panic!("参数解析错误：segment_length 不是数字: {}。", value);
         }
     }
 
@@ -244,11 +243,11 @@ pub fn config_from_args() -> (PathBuf, PathBuf, Config) {
             // is numeric
             let value = value.trim().parse::<i32>().unwrap();
             if value < 0 || value > 180 {
-                panic!("Out of Range Error: Segment length is invalid at {}. It must be within [0,180].", value);
+                panic!("范围错误：splice_threshold={} 无效，必须在 [0,180] 范围内。", value);
             }
             config.splice_threshold = value;
         } else {
-            panic!("Parser Error: Segment length is not numeric: {}.", value);
+            panic!("参数解析错误：splice_threshold 不是数字: {}。", value);
         }
     }
 
@@ -259,7 +258,7 @@ pub fn config_from_args() -> (PathBuf, PathBuf, Config) {
             config.path_precision = value;
         } else {
             panic!(
-                "Parser Error: Path precision is not an unsigned integer: {}.",
+                "参数解析错误：path_precision 不是无符号整数: {}。",
                 value
             );
         }
@@ -273,10 +272,10 @@ fn main() {
     let result = converter::convert_image_to_svg(&input_path, &output_path, config);
     match result {
         Ok(()) => {
-            println!("Conversion successful.");
+            println!("转换成功。");
         }
         Err(msg) => {
-            panic!("Conversion failed with error message: {}", msg);
+            panic!("转换失败，错误信息: {}", msg);
         }
     }
 }

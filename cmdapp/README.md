@@ -1,96 +1,52 @@
-<div align="center">
+﻿<div align="center">
 
   <img src="https://raw.githubusercontent.com/visioncortex/vtracer/master/docs/images/visioncortex-banner.png">
   <h1>VTracer</h1>
 
   <p>
-    <strong>Raster to Vector Graphics Converter built on top of visioncortex</strong>
+    <strong>基于 visioncortex 的位图转矢量图工具</strong>
   </p>
 
   <h3>
-    <a href="https://www.visioncortex.org/vtracer-docs">Article</a>
+    <a href="https://www.visioncortex.org/vtracer-docs">算法文档</a>
     <span> | </span>
-    <a href="https://www.visioncortex.org/vtracer/">Demo</a>
+    <a href="https://www.visioncortex.org/vtracer/">在线演示</a>
     <span> | </span>
-    <a href="https://github.com/visioncortex/vtracer/releases/latest">Download</a>
+    <a href="https://github.com/visioncortex/vtracer/releases/latest">下载</a>
   </h3>
 
-  <sub>Built with 🦀 by <a href="https://www.visioncortex.org/">The Vision Cortex Research Group</a></sub>
 </div>
 
-## Introduction
+## 简介
 
-visioncortex VTracer is an open source software to convert raster images (like jpg & png) into vector graphics (svg). It can vectorize graphics and photographs and trace the curves to output compact vector files.
+VTracer 是一个开源项目，用于将位图图像（`jpg/png`）转换为矢量图（`svg`）。
 
-Comparing to [Potrace](http://potrace.sourceforge.net/) which only accept binarized inputs (Black & White pixmap), VTracer has an image processing pipeline which can handle colored high resolution scans.
+与仅支持二值图输入的 Potrace 相比，VTracer 支持彩色图像处理；与部分图形软件的自动描摹相比，VTracer 往往能得到更紧凑的输出形状。
 
-Comparing to Adobe Illustrator's [Image Trace](https://helpx.adobe.com/illustrator/using/image-trace.html), VTracer's output is much more compact (less shapes) as we adopt a stacking strategy and avoid producing shapes with holes.
-
-VTracer is originally designed for processing high resolution scans of historic blueprints up to gigapixels. At the same time, VTracer can also handle low resolution pixel art, simulating `image-rendering: pixelated` for retro game artworks.
-
-A technical description of the algorithm is on [visioncortex.org/vtracer-docs](https://www.visioncortex.org/vtracer-docs).
-
-## Cmd App
+## 命令行工具
 
 ```sh
 visioncortex VTracer 0.6.0
-A cmd app to convert images into vector graphics.
+一个将图像转换为矢量图的命令行工具。
 
 USAGE:
     vtracer [OPTIONS] --input <input> --output <output>
-
-FLAGS:
-    -h, --help       Prints help information
-    -V, --version    Prints version information
-
-OPTIONS:
-        --colormode <color_mode>                 True color image `color` (default) or Binary image `bw`
-    -p, --color_precision <color_precision>      Number of significant bits to use in an RGB channel
-    -c, --corner_threshold <corner_threshold>    Minimum momentary angle (degree) to be considered a corner
-    -f, --filter_speckle <filter_speckle>        Discard patches smaller than X px in size
-    -g, --gradient_step <gradient_step>          Color difference between gradient layers
-        --hierarchical <hierarchical>
-            Hierarchical clustering `stacked` (default) or non-stacked `cutout`. Only applies to color mode.
-
-    -i, --input <input>                          Path to input raster image
-    -m, --mode <mode>                            Curver fitting mode `pixel`, `polygon`, `spline`
-    -o, --output <output>                        Path to output vector graphics
-        --path_precision <path_precision>        Number of decimal places to use in path string
-        --preset <preset>                        Use one of the preset configs `bw`, `poster`, `photo`
-    -l, --segment_length <segment_length>
-            Perform iterative subdivide smooth until all segments are shorter than this length
-
-    -s, --splice_threshold <splice_threshold>    Minimum angle displacement (degree) to splice a spline
 ```
 
-### Install
+## 安装
 
-You can download pre-built binaries from [Releases](https://github.com/visioncortex/vtracer/releases).
+### 下载预编译二进制
 
-You can also install the program from source from [crates.io/vtracer](https://crates.io/crates/vtracer):
+https://github.com/visioncortex/vtracer/releases
+
+### 从 crates.io 安装
 
 ```sh
 cargo install vtracer
 ```
 
-### Usage
+## 使用
 
 ```sh
 ./vtracer --input input.jpg --output output.svg
-```
-
-## Rust Library
-
-You can install [`vtracer`](https://crates.io/crates/vtracer) as a Rust library.
-
-```sh
-cargo add vtracer
-```
-
-## Python Library
-
-Since `0.6`, [`vtracer`](https://pypi.org/project/vtracer/) is also packaged as Python native extensions, thanks to the awesome [pyo3](https://github.com/PyO3/pyo3) project.
-
-```sh
-pip install vtracer
 ```

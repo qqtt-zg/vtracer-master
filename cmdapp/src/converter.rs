@@ -62,7 +62,7 @@ fn find_unused_color_in_image(img: &ColorImage) -> Result<Color, String> {
         }
     }
     Err(String::from(
-        "unable to find unused color in image to use as key",
+        "无法在图像中找到可作为键色的未使用颜色",
     ))
 }
 
@@ -211,7 +211,7 @@ fn read_image(input_path: &Path) -> Result<ColorImage, String> {
     let img = image::open(input_path);
     let img = match img {
         Ok(file) => file.to_rgba8(),
-        Err(_) => return Err(String::from("No image file found at specified input path")),
+        Err(_) => return Err(String::from("在指定输入路径未找到可读取的图像文件")),
     };
 
     let (width, height) = (img.width() as usize, img.height() as usize);
@@ -228,7 +228,7 @@ fn write_svg(svg: SvgFile, output_path: &Path) -> Result<(), String> {
     let out_file = File::create(output_path);
     let mut out_file = match out_file {
         Ok(file) => file,
-        Err(_) => return Err(String::from("Cannot create output file.")),
+        Err(_) => return Err(String::from("无法创建输出文件。")),
     };
 
     write!(&mut out_file, "{}", svg).expect("failed to write file.");

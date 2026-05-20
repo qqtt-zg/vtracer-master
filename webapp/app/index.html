@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
     <head>
         <meta charset="utf-8">
@@ -63,7 +63,7 @@
                 <div id="drop">
                     <div id="canvas-container">
                         <div id="droptext">
-                            <p>Drag an image here or <a href="#" id="imageSelect">Select file</a></p>
+                            <p>将图片拖到这里，或<a href="#" id="imageSelect">选择文件</a></p>
                         </div>
                         <canvas id="frame"></canvas>
                         <svg id="svg" version="1.1" xmlns="http://www.w3.org/2000/svg"></svg>
@@ -72,34 +72,34 @@
             </div>
             <div id="options">
                 <div>
-                    <a class="button" id="export">Download as SVG</a>    
+                    <a class="button" id="export">下载为 SVG</a>    
                 </div>
 
                 <p></p>
 
                 <div>
                     <div title="Algorithm for segmentation and grouping of pixel clusters">
-                        Clustering
+                        聚类
                     </div>
                 </div>
 
                 <div>
                     <div>
-                        <button id="clustering-binary" title="Black & White (Binary Image)">B/W</button>
-                        <button id="clustering-color" title="True Color Image">Color</button>
+                        <button id="clustering-binary" title="黑白（二值图）">黑白</button>
+                        <button id="clustering-color" title="True 彩色 Image">彩色</button>
                     </div>
                 </div>
 
                 <div>
                     <div>
-                        <button id="clustering-cutout" title="Shapes disjoint with others">Cutout</button>
-                        <button id="clustering-stacked" title="Stack shapes on top of another">Stacked</button>
+                        <button id="clustering-cutout" title="形状与其他区域不重叠">剪切</button>
+                        <button id="clustering-stacked" title="形状按层叠放">叠层</button>
                     </div>
                 </div>
 
                 <div>
-                    <div title="Discard patches small than X px in size">
-                        Filter Speckle <span>(Cleaner)</span>
+                    <div title="过滤面积小于 X 像素的色块">
+                        噪点过滤 <span>（更干净）</span>
                     </div>
                 </div>
                 <div id="filterspecklevalue">
@@ -110,8 +110,8 @@
                 </div>
 
                 <div class="clustering-color-options">
-                    <div title="Number of significant bits to use in a RGB channel">
-                        Color Precision <span>(More accurate)</span>
+                    <div title="每个 RGB 通道保留的有效位数">
+                        颜色精度 <span>（更精确）</span>
                     </div>
                 </div>
                 <div id="colorprecisionvalue" class="clustering-color-options">
@@ -122,8 +122,8 @@
                 </div>
 
                 <div class="clustering-color-options">
-                    <div title="Color difference between gradient layers">
-                        Gradient Step <span>(Less layers)</span>
+                    <div title="渐变层之间的颜色差值">
+                        渐变步长 <span>（层数更少）</span>
                     </div>
                 </div>
                 <div id="layerdifferencevalue" class="clustering-color-options">
@@ -137,21 +137,21 @@
 
                 <div>
                     <div title="Algorithm for converting clusters to shapes">
-                        Curve Fitting
+                        曲线拟合
                     </div>
                 </div>
 
                 <div>
                     <div>
-                        <button id="none" title="Exact cluster boundary">Pixel</button>
-                        <button id="polygon" title="Simplify to Polygon">Polygon</button>
-                        <button id="spline" class="selected" title="Smooth and Curve-fit">Spline</button>
+                        <button id="none" title="精确保留像素边界">像素</button>
+                        <button id="polygon" title="简化为多边形">多边形</button>
+                        <button id="spline" class="selected" title="平滑并拟合曲线">样条</button>
                     </div>
                 </div>
 
                 <div class="spline-options">
-                    <div title="Minimum Momentary Angle (in degrees) to be considered a corner (to be kept after smoothing)">
-                        Corner Threshold <span>(Smoother)</span>
+                    <div title="判定为拐角的最小瞬时角度（度，平滑后仍保留）">
+                        拐角阈值 <span>（更平滑）</span>
                     </div>
                 </div>
                 <div id="cornervalue" class="spline-options">
@@ -162,8 +162,8 @@
                 </div>
 
                 <div class="spline-options">
-                    <div title="Perform Iterative Subdivide Smooth until all segments are shorter than this length">
-                        Segment Length <span>(More coarse)</span>
+                    <div title="迭代细分平滑，直到所有线段短于该长度">
+                        线段长度 <span>（更粗略）</span>
                     </div>
                 </div>
                 <div id="lengthvalue" class="spline-options">
@@ -174,8 +174,8 @@
                 </div>
 
                 <div class="spline-options">
-                    <div title="Minimum Angle Displacement (in degrees) to be considered a cutting point between curves">
-                        Splice Threshold <span>(More accurate)</span>
+                    <div title="判定为曲线切分点的最小角位移（度）">
+                        拼接阈值 <span>（更精确）</span>
                     </div>
                 </div>
                 <div id="splicevalue" class="spline-options">
@@ -187,8 +187,8 @@
                 
                 <div style="display: none">
                 <div class="spline-options">
-                    <div title="Number of decimal places used in svg path string">
-                        Path Precision <span>(More digits)</span>
+                    <div title="SVG 路径字符串小数位数">
+                        路径精度 <span>（更多位数）</span>
                     </div>
                 </div>
                 <div id="pathprecisionvalue" class="spline-options">
@@ -203,3 +203,4 @@
         <script src="./bootstrap.js"></script>
     </body>
 </html>
+
