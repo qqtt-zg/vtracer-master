@@ -45,10 +45,37 @@ Web 发布流程说明：
 
 - 保留现有 WebDriver 链路：`desktopapp/e2e/http-desktop-e2e.js`
 - 新增 CDP-Playwright 链路：`desktopapp/e2e/cdp-playwright-e2e.js`
-- `http-session-probe` 作为 CI 必过项（立即生效）
-- 完整桌面 E2E（WebDriver + CDP）先灰度 1 周，到 `2026-05-28T00:00:00Z` 后自动转为必过
+- `http-session-probe` 作为 CI 必过项（立即生效，不灰度）
+- 完整桌面 E2E（WebDriver + CDP）先灰度 1 周，到 `2026-05-28T00:00:00Z`（北京时间 `2026-05-28 08:00`）后自动转为必过
 
 对应 CI 工作流见：`.github/workflows/rust.yml`
+
+当前稳定策略按代码现状执行如下：
+
+1. 统一入口与顺序（`desktop-windows` 作业）
+- `Run raw HTTP session probe`：硬门禁，失败即作业失败
+- `Run desktop session preflight`：跟随灰度开关（灰度期允许失败）
+- `Run desktop e2e (WebDriver lane)`：跟随灰度开关（灰度期允许失败）
+- `Run desktop e2e (CDP-Playwright lane)`：跟随灰度开关（灰度期允许失败）
+
+2. 灰度与转正规则
+- 灰度截止时间由 `FULL_DESKTOP_E2E_GRADUATION_UTC` 控制（当前值：`2026-05-28T00:00:00Z`）
+- 当 `now < deadline`：`FULL_DESKTOP_E2E_REQUIRED=false`，完整桌面 E2E 使用 `continue-on-error`
+- 当 `now >= deadline`：`FULL_DESKTOP_E2E_REQUIRED=true`，完整桌面 E2E 任一失败都会使作业失败
+
+3. 构建稳定性约束（必须保持）
+- `webapp-e2e` 与 `desktop-windows` 均先执行 `wasm-pack build --target web`
+- `webapp/app` 的 `start/build` 均先执行 `patch-wasm-bindgen-output.js`，兼容当前 webpack4 对 `import.meta.url` 的限制
+
+4. 灰度期验收口径
+- 每次 CI 至少检查 3 个步骤结果：
+- `Run raw HTTP session probe`
+- `Run desktop e2e (WebDriver lane)`
+- `Run desktop e2e (CDP-Playwright lane)`
+
+5. 异常回滚策略
+- 若转必过后短期出现系统性不稳定，可临时把 `FULL_DESKTOP_E2E_GRADUATION_UTC` 顺延 7 天恢复灰度
+- 回滚仅针对完整桌面 E2E，`http-session-probe` 继续保持必过
 
 ## 命令行工具（Cmd App）
 

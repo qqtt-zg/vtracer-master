@@ -166,7 +166,7 @@ jobs:
           } else {
             "tauri-driver.exe missing" | Out-File -FilePath "$diagDir/driver-versions.txt" -Encoding utf8 -Append
           }
-          if (Test-Path $env:NATIVE_DRIVER_PATH) {
+          if (-not [string]::IsNullOrWhiteSpace($env:NATIVE_DRIVER_PATH) -and (Test-Path $env:NATIVE_DRIVER_PATH)) {
             & $env:NATIVE_DRIVER_PATH --version | Out-File -FilePath "$diagDir/driver-versions.txt" -Encoding utf8 -Append
           } else {
             "native driver missing: $env:NATIVE_DRIVER_PATH" | Out-File -FilePath "$diagDir/driver-versions.txt" -Encoding utf8 -Append
