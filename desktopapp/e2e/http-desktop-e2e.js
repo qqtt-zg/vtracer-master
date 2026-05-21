@@ -416,7 +416,9 @@ function shouldRetryError(error) {
   return text.includes('request timeout')
     || text.includes('invalid session id')
     || text.includes('not connected to DevTools')
-    || text.includes('session create failed');
+    || text.includes('session create failed')
+    || text.includes('SVG path not generated')
+    || text.includes('SVG did not change after parameter update');
 }
 
 async function main() {

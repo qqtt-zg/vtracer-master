@@ -39,6 +39,16 @@ function releaseAsciiRepoAlias(alias) {
   runSubst([alias.drive, "/d"]);
 }
 
+function normalizeWindowsPathEnv(inputEnv) {
+  const env = { ...inputEnv };
+  if (process.platform === "win32") {
+    const pathValue = env.Path || env.PATH || "";
+    delete env.PATH;
+    env.Path = pathValue;
+  }
+  return env;
+}
+
 function loadPlaywrightChromium() {
   const candidates = [
     () => require("playwright"),
@@ -58,21 +68,151 @@ function loadPlaywrightChromium() {
   throw new Error("Playwright chromium API not found. Install deps in webapp/app or desktopapp/e2e.");
 }
 
-function requestJson(url, timeoutMs = 3000) {
+function requestText({ host, port, requestPath, method = "GET", headers = {}, body = "", timeoutMs = 15000 }) {
   return new Promise((resolve, reject) => {
-    const req = http.get(url, (res) => {
-      const chunks = [];
-      res.on("data", (chunk) => chunks.push(chunk));
-      res.on("end", () => {
-        const text = Buffer.concat(chunks).toString("utf8");
-        resolve({
-          statusCode: Number(res.statusCode || 0),
-          text,
+    const payload = body || "";
+    const reqHeaders = { ...headers };
+    if (payload) {
+      reqHeaders["Content-Length"] = Buffer.byteLength(payload);
+    }
+    const req = http.request(
+      {
+        host,
+        port,
+        path: requestPath,
+        method,
+        headers: reqHeaders,
+      },
+      (res) => {
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => {
+          resolve({
+            statusCode: Number(res.statusCode || 0),
+            body: Buffer.concat(chunks).toString("utf8"),
+          });
         });
-      });
-    });
+      },
+    );
     req.on("error", (error) => reject(error));
     req.setTimeout(timeoutMs, () => req.destroy(new Error("request timeout")));
+    if (payload) {
+      req.write(payload);
+    }
+    req.end();
+  });
+}
+
+async function waitForDriver(host, port, timeoutMs) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const response = await requestText({
+        host,
+        port,
+        requestPath: "/status",
+        method: "GET",
+        timeoutMs: 3000,
+      });
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return;
+      }
+    } catch (_error) {
+      // keep polling
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`timeout waiting tauri-driver on ${host}:${port}`);
+}
+
+async function createSession({ host, port, appPath, debugPort }) {
+  const candidates = [
+    {
+      label: "tauri",
+      alwaysMatch: {
+        browserName: "tauri",
+        "tauri:options": {
+          application: appPath,
+          webviewOptions: {
+            additionalBrowserArguments: [`--remote-debugging-port=${debugPort}`, "--disable-gpu", "--disable-software-rasterizer"],
+          },
+        },
+      },
+    },
+    {
+      label: "wry",
+      alwaysMatch: {
+        browserName: "wry",
+        "tauri:options": {
+          application: appPath,
+          webviewOptions: {
+            additionalBrowserArguments: [`--remote-debugging-port=${debugPort}`, "--disable-gpu", "--disable-software-rasterizer"],
+          },
+        },
+      },
+    },
+    {
+      label: "tauri-options-only",
+      alwaysMatch: {
+        "tauri:options": {
+          application: appPath,
+          webviewOptions: {
+            additionalBrowserArguments: [`--remote-debugging-port=${debugPort}`, "--disable-gpu", "--disable-software-rasterizer"],
+          },
+        },
+      },
+    },
+  ];
+
+  const attempts = [];
+  for (const candidate of candidates) {
+    const payload = {
+      capabilities: {
+        alwaysMatch: candidate.alwaysMatch,
+        firstMatch: [{}],
+      },
+    };
+    try {
+      const response = await requestText({
+        host,
+        port,
+        requestPath: "/session",
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+        timeoutMs: 60000,
+      });
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        attempts.push(`${candidate.label}:${response.statusCode}`);
+        continue;
+      }
+
+      const parsed = JSON.parse(response.body || "{}");
+      const sessionId = parsed?.value?.sessionId || parsed?.sessionId || "";
+      if (!sessionId) {
+        attempts.push(`${candidate.label}:missing-session-id`);
+        continue;
+      }
+      return { sessionId, selectedBrowser: candidate.label };
+    } catch (error) {
+      attempts.push(`${candidate.label}:ERR:${String(error && error.message ? error.message : error)}`);
+    }
+  }
+
+  throw new Error(`session create failed -> ${attempts.join(" | ")}`);
+}
+
+async function deleteSession({ host, port, sessionId }) {
+  if (!sessionId) {
+    return;
+  }
+  await requestText({
+    host,
+    port,
+    requestPath: `/session/${sessionId}`,
+    method: "DELETE",
+    timeoutMs: 15000,
   });
 }
 
@@ -81,7 +221,13 @@ async function waitForCdpReady(host, port, timeoutMs) {
   const url = `http://${host}:${port}/json/version`;
   while (Date.now() - started < timeoutMs) {
     try {
-      const response = await requestJson(url, 3000);
+      const response = await requestText({
+        host,
+        port,
+        requestPath: "/json/version",
+        method: "GET",
+        timeoutMs: 3000,
+      });
       if (response.statusCode >= 200 && response.statusCode < 300) {
         return;
       }
@@ -107,13 +253,7 @@ async function waitForPage(browser, timeoutMs) {
   throw new Error("no page detected in CDP contexts");
 }
 
-async function runScenario(page, sampleImage) {
-  await page.waitForFunction(
-    () => !!(window.__VTRACER_E2E && typeof window.__VTRACER_E2E.openImageByPath === "function"),
-    null,
-    { timeout: 30000 },
-  );
-
+async function openImageByPath(page, sampleImage) {
   const openResult = await page.evaluate(async (inputPath) => {
     try {
       const result = await window.__VTRACER_E2E.openImageByPath(inputPath);
@@ -125,12 +265,44 @@ async function runScenario(page, sampleImage) {
   if (!openResult || !openResult.ok) {
     throw new Error(`openImageByPath failed: ${JSON.stringify(openResult)}`);
   }
+}
 
+async function runScenario(page, sampleImage) {
   await page.waitForFunction(
-    () => document.querySelectorAll("#svg path").length > 0,
+    () => !!(window.__VTRACER_E2E && typeof window.__VTRACER_E2E.openImageByPath === "function"),
     null,
-    { timeout: 120000 },
+    { timeout: 30000 },
   );
+
+  const initialRenderRetries = Number(process.env.VTRACER_E2E_INITIAL_RENDER_RETRIES || 2);
+  let rendered = false;
+  let lastStatus = "";
+  for (let attempt = 1; attempt <= initialRenderRetries; attempt += 1) {
+    await openImageByPath(page, sampleImage);
+    try {
+      await page.waitForFunction(
+        () => document.querySelectorAll("#svg path").length > 0,
+        null,
+        { timeout: 90000 },
+      );
+      rendered = true;
+      break;
+    } catch (_err) {
+      lastStatus = await page.evaluate(() => {
+        if (window.__VTRACER_E2E && typeof window.__VTRACER_E2E.getStatusText === "function") {
+          return window.__VTRACER_E2E.getStatusText() || "";
+        }
+        return "";
+      });
+      if (attempt >= initialRenderRetries) {
+        break;
+      }
+      await page.waitForTimeout(350);
+    }
+  }
+  if (!rendered) {
+    throw new Error(`SVG path not generated (desktopStatus=${lastStatus || "n/a"})`);
+  }
 
   const beforeSvg = await page.locator("#svg").innerHTML();
   await page.evaluate(() => {
@@ -202,8 +374,9 @@ async function main() {
   fs.mkdirSync(settingsDir, { recursive: true });
 
   let alias = null;
-  let appProc = null;
+  let driver = null;
   let browser = null;
+  let sessionId = "";
   let outStream = null;
   let errStream = null;
 
@@ -215,9 +388,21 @@ async function main() {
       || path.resolve(effectiveRepoRoot, "desktopapp", "src-tauri", "target", "debug", "vtracer-desktop.exe");
     const sampleImage = process.env.SAMPLE_IMAGE
       || path.resolve(effectiveRepoRoot, "webapp", "app", "public", "assets", "samples", "test-logo.png");
-    const host = process.env.VTRACER_CDP_HOST || "127.0.0.1";
-    const cdpPort = Number(process.env.VTRACER_WEBVIEW_DEBUG_PORT || 9333);
+    const tauriDriverPath = process.env.TAURI_DRIVER_PATH
+      || path.resolve(process.env.USERPROFILE || process.env.HOME || "", ".cargo", "bin", "tauri-driver.exe");
+    const nativeDriverPath = process.env.NATIVE_DRIVER_PATH
+      || path.resolve(effectiveRepoRoot, "msedgedriver.exe");
+    const host = process.env.VTRACER_DRIVER_HOST || "127.0.0.1";
+    const driverPort = Number(process.env.VTRACER_DRIVER_PORT || 4555);
+    const nativePort = Number(process.env.VTRACER_NATIVE_PORT || 9555);
+    const cdpPort = Number(process.env.VTRACER_WEBVIEW_DEBUG_PORT || 9222);
 
+    if (!fs.existsSync(tauriDriverPath)) {
+      throw new Error(`tauri-driver not found: ${tauriDriverPath}`);
+    }
+    if (!fs.existsSync(nativeDriverPath)) {
+      throw new Error(`native driver not found: ${nativeDriverPath}`);
+    }
     if (!fs.existsSync(appPath)) {
       throw new Error(`desktop app not found: ${appPath}`);
     }
@@ -225,34 +410,39 @@ async function main() {
       throw new Error(`sample image not found: ${sampleImage}`);
     }
 
-    const stdoutPath = path.join(logsDir, "cdp-e2e.app.stdout.log");
-    const stderrPath = path.join(logsDir, "cdp-e2e.app.stderr.log");
+    const env = normalizeWindowsPathEnv({
+      ...process.env,
+      TAURI_AUTOMATION: process.env.TAURI_AUTOMATION || "1",
+      TAURI_WEBVIEW_AUTOMATION: process.env.TAURI_WEBVIEW_AUTOMATION || "1",
+      VTRACER_E2E_ENABLED: process.env.VTRACER_E2E_ENABLED || "1",
+      VTRACER_WEBVIEW_DEBUG_PORT: String(cdpPort),
+      VTRACER_SETTINGS_DIR: settingsDir,
+    });
+
+    const stdoutPath = path.join(logsDir, "cdp-e2e.tauri-driver.stdout.log");
+    const stderrPath = path.join(logsDir, "cdp-e2e.tauri-driver.stderr.log");
     outStream = fs.createWriteStream(stdoutPath, { flags: "a" });
     errStream = fs.createWriteStream(stderrPath, { flags: "a" });
 
-    appProc = spawn(appPath, [], {
-      cwd: path.dirname(appPath),
-      shell: false,
+    driver = spawn(tauriDriverPath, ["--native-driver", nativeDriverPath, "--port", String(driverPort), "--native-port", String(nativePort)], {
       stdio: ["ignore", "pipe", "pipe"],
-      env: {
-        ...process.env,
-        TAURI_AUTOMATION: process.env.TAURI_AUTOMATION || "1",
-        TAURI_WEBVIEW_AUTOMATION: process.env.TAURI_WEBVIEW_AUTOMATION || "1",
-        VTRACER_E2E_ENABLED: process.env.VTRACER_E2E_ENABLED || "1",
-        VTRACER_WEBVIEW_DEBUG_PORT: String(cdpPort),
-        VTRACER_SETTINGS_DIR: settingsDir,
-      },
+      shell: false,
+      env,
     });
-    appProc.stdout.on("data", (chunk) => {
+    driver.stdout.on("data", (chunk) => {
       process.stdout.write(chunk);
       outStream.write(chunk);
     });
-    appProc.stderr.on("data", (chunk) => {
+    driver.stderr.on("data", (chunk) => {
       process.stderr.write(chunk);
       errStream.write(chunk);
     });
 
-    await waitForCdpReady(host, cdpPort, 30000);
+    await waitForDriver(host, driverPort, 30000);
+    const created = await createSession({ host, port: driverPort, appPath, debugPort: cdpPort });
+    sessionId = created.sessionId;
+
+    await waitForCdpReady(host, cdpPort, 60000);
 
     const chromium = loadPlaywrightChromium();
     browser = await chromium.connectOverCDP(`http://${host}:${cdpPort}`);
@@ -260,19 +450,26 @@ async function main() {
     await page.bringToFront();
 
     await runScenario(page, sampleImage);
-
   } finally {
+    if (browser) {
+      await browser.close().catch(() => {});
+    }
+    if (sessionId) {
+      try {
+        await deleteSession({ host: process.env.VTRACER_DRIVER_HOST || "127.0.0.1", port: Number(process.env.VTRACER_DRIVER_PORT || 4555), sessionId });
+      } catch (_err) {
+        // ignore cleanup failure
+      }
+      sessionId = "";
+    }
     if (outStream) {
       outStream.end();
     }
     if (errStream) {
       errStream.end();
     }
-    if (browser) {
-      await browser.close().catch(() => {});
-    }
-    if (appProc && !appProc.killed) {
-      appProc.kill();
+    if (driver && !driver.killed) {
+      driver.kill();
     }
     releaseAsciiRepoAlias(alias);
   }
