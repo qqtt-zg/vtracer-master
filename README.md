@@ -41,6 +41,15 @@ Web 发布流程说明：
 - 发布产物目录：`docs`（由构建同步生成，不直接手改业务逻辑）
 - 一键构建同步命令：`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-sync-web-docs.ps1`
 
+## 桌面 E2E 门禁策略（并行双链路）
+
+- 保留现有 WebDriver 链路：`desktopapp/e2e/http-desktop-e2e.js`
+- 新增 CDP-Playwright 链路：`desktopapp/e2e/cdp-playwright-e2e.js`
+- `http-session-probe` 作为 CI 必过项（立即生效）
+- 完整桌面 E2E（WebDriver + CDP）先灰度 1 周，到 `2026-05-28T00:00:00Z` 后自动转为必过
+
+对应 CI 工作流见：`.github/workflows/rust.yml`
+
 ## 命令行工具（Cmd App）
 
 ```sh

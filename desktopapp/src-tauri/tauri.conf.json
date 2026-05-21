@@ -16,7 +16,8 @@
         "decorations": false,
         "shadow": true,
         "minWidth": 1120,
-        "minHeight": 720
+        "minHeight": 720,
+        "devtools": true
       }
     ],
     "security": {

@@ -3,8 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "test": "node run-desktop-e2e.js",
+    "test": "node http-desktop-e2e.js",
     "test:http-e2e": "node http-desktop-e2e.js",
+    "test:cdp-e2e": "node cdp-playwright-e2e.js",
+    "test:wdio": "node run-desktop-e2e.js",
     "test:session-preflight": "node session-preflight.js",
     "test:http-probe": "powershell -ExecutionPolicy Bypass -File .\\http-session-probe.ps1",
     "wdio": "wdio run wdio.conf.cjs"

@@ -45,6 +45,8 @@ jobs:
 
   desktop-windows:
     runs-on: windows-latest
+    env:
+      FULL_DESKTOP_E2E_GRADUATION_UTC: "2026-05-28T00:00:00Z"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -79,10 +81,20 @@ jobs:
       - name: Install desktop e2e dependencies
         working-directory: desktopapp/e2e
         run: npm ci
+      - name: Decide full desktop e2e gate mode
+        id: full-desktop-gate
+        shell: pwsh
+        run: |
+          $deadline = [DateTimeOffset]::Parse("${{ env.FULL_DESKTOP_E2E_GRADUATION_UTC }}")
+          $now = [DateTimeOffset]::UtcNow
+          $required = if ($now -ge $deadline) { "true" } else { "false" }
+          "FULL_DESKTOP_E2E_REQUIRED=$required" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "full_desktop_e2e_required=$required" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "full_desktop_e2e_deadline=$($deadline.ToString('o'))" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "full_desktop_e2e_now=$($now.ToString('o'))" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
       - name: Run raw HTTP session probe
         working-directory: desktopapp/e2e
         shell: pwsh
-        continue-on-error: true
         run: |
           powershell -ExecutionPolicy Bypass -File .\http-session-probe.ps1 `
             -TauriDriverPath "$env:USERPROFILE\.cargo\bin\tauri-driver.exe" `
@@ -92,19 +104,27 @@ jobs:
       - name: Run desktop session preflight
         working-directory: desktopapp/e2e
         shell: pwsh
-        continue-on-error: true
+        continue-on-error: ${{ steps.full-desktop-gate.outputs.full_desktop_e2e_required != 'true' }}
         run: |
           $env:TAURI_DRIVER_PATH="$env:USERPROFILE\.cargo\bin\tauri-driver.exe"
           $env:NATIVE_DRIVER_PATH="$env:NATIVE_DRIVER_PATH"
           npm run test:session-preflight
-      - name: Run desktop e2e
+      - name: Run desktop e2e (WebDriver lane)
         working-directory: desktopapp/e2e
         shell: pwsh
-        continue-on-error: true
+        continue-on-error: ${{ steps.full-desktop-gate.outputs.full_desktop_e2e_required != 'true' }}
         run: |
           $env:TAURI_DRIVER_PATH="$env:USERPROFILE\.cargo\bin\tauri-driver.exe"
           $env:NATIVE_DRIVER_PATH="$env:NATIVE_DRIVER_PATH"
           npm test
+      - name: Run desktop e2e (CDP-Playwright lane)
+        working-directory: desktopapp/e2e
+        shell: pwsh
+        continue-on-error: ${{ steps.full-desktop-gate.outputs.full_desktop_e2e_required != 'true' }}
+        run: |
+          $env:DESKTOP_APP_PATH="$env:GITHUB_WORKSPACE\desktopapp\src-tauri\target\debug\vtracer-desktop.exe"
+          $env:SAMPLE_IMAGE="$env:GITHUB_WORKSPACE\webapp\app\public\assets\samples\test-logo.png"
+          npm run test:cdp-e2e
       - name: Collect desktop e2e diagnostics
         if: always()
         shell: pwsh
@@ -118,6 +138,9 @@ jobs:
           "== env ==" | Out-File -FilePath "$diagDir/summary.txt" -Encoding utf8 -Append
           "TAURI_DRIVER_PATH=$env:TAURI_DRIVER_PATH" | Out-File -FilePath "$diagDir/summary.txt" -Encoding utf8 -Append
           "NATIVE_DRIVER_PATH=$env:NATIVE_DRIVER_PATH" | Out-File -FilePath "$diagDir/summary.txt" -Encoding utf8 -Append
+          "FULL_DESKTOP_E2E_REQUIRED=${{ steps.full-desktop-gate.outputs.full_desktop_e2e_required }}" | Out-File -FilePath "$diagDir/summary.txt" -Encoding utf8 -Append
+          "FULL_DESKTOP_E2E_GRADUATION_UTC=${{ steps.full-desktop-gate.outputs.full_desktop_e2e_deadline }}" | Out-File -FilePath "$diagDir/summary.txt" -Encoding utf8 -Append
+          "FULL_DESKTOP_E2E_NOW_UTC=${{ steps.full-desktop-gate.outputs.full_desktop_e2e_now }}" | Out-File -FilePath "$diagDir/summary.txt" -Encoding utf8 -Append
 
           "== where tauri-driver ==" | Out-File -FilePath "$diagDir/where-tauri-driver.txt" -Encoding utf8
           $tauriCmd = Get-Command tauri-driver -ErrorAction SilentlyContinue

@@ -1,4 +1,4 @@
-const path = require("path");
+﻿const path = require("path");
 
 const appPath = process.env.DESKTOP_APP_PATH
   || path.resolve(__dirname, "../src-tauri/target/debug/vtracer-desktop.exe");
@@ -9,6 +9,8 @@ const logDir = process.env.VTRACER_E2E_LOG_DIR
   || path.resolve(__dirname, ".artifacts", "tauri-service");
 const appSettingsDir = process.env.VTRACER_SETTINGS_DIR
   || path.resolve(__dirname, ".artifacts", "settings");
+const debugPort = Number(process.env.VTRACER_WEBVIEW_DEBUG_PORT || 9222);
+const webdriverBrowserName = process.env.VTRACER_WEBDRIVER_BROWSER || "tauri";
 
 exports.config = {
   runner: "local",
@@ -47,11 +49,11 @@ exports.config = {
     },
   ]],
   capabilities: [{
-    browserName: "tauri",
+    browserName: webdriverBrowserName,
     "tauri:options": {
       application: appPath,
       webviewOptions: {
-        additionalBrowserArguments: ["--remote-debugging-port=9222"],
+        additionalBrowserArguments: [`--remote-debugging-port=${debugPort}`],
       },
     }
   }],
@@ -65,3 +67,7 @@ exports.config = {
     await browser.pause(500);
   },
 };
+
+
+
+

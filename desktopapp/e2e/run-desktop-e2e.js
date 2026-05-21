@@ -1,4 +1,4 @@
-const fs = require("fs");
+﻿const fs = require("fs");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
@@ -65,7 +65,14 @@ function ensureServiceExpectedBinary(rawAppPath) {
       return;
     }
   }
-  fs.copyFileSync(rawAppPath, expectedBinary);
+  try {
+    fs.copyFileSync(rawAppPath, expectedBinary);
+  } catch (error) {
+    if (error && error.code === "EPERM" && fs.existsSync(expectedBinary)) {
+      return;
+    }
+    throw error;
+  }
 }
 
 function runWdioWithLogs(env, logsDir) {
@@ -102,6 +109,10 @@ function runWdioWithLogs(env, logsDir) {
       resolve(code ?? 1);
     });
   });
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function runNodeScriptWithLogs(scriptPath, env, logsDir, prefix) {
@@ -165,6 +176,7 @@ async function main() {
     ensureServiceExpectedBinary(rawAppPath);
     fs.copyFileSync(rawSampleImage, sampleImage);
 
+    const debugPort = Number(process.env.VTRACER_WEBVIEW_DEBUG_PORT || (13000 + (Date.now() % 10000)));
     const env = {
       ...process.env,
       DESKTOP_APP_PATH: rawAppPath,
@@ -174,6 +186,7 @@ async function main() {
       VTRACER_E2E_ENABLED: "1",
       TAURI_AUTOMATION: "1",
       TAURI_WEBVIEW_AUTOMATION: "1",
+      VTRACER_WEBVIEW_DEBUG_PORT: String(debugPort),
     };
     if (fs.existsSync(nativeDriverPath)) {
       env.NATIVE_DRIVER_PATH = nativeDriverPath;
@@ -197,12 +210,39 @@ async function main() {
     );
 
     const preflightScript = path.resolve(__dirname, "session-preflight.js");
-    const preflightExit = await runNodeScriptWithLogs(preflightScript, env, logsDir, "preflight.exec");
+    let preflightExit = 1;
+    for (let i = 1; i <= 3; i += 1) {
+      preflightExit = await runNodeScriptWithLogs(preflightScript, env, logsDir, "preflight.exec");
+      if (preflightExit === 0) {
+        break;
+      }
+      await sleep(800);
+    }
     if (preflightExit !== 0) {
       process.exit(preflightExit);
     }
 
-    const exitCode = await runWdioWithLogs(env, logsDir);
+    try {
+      const preflightReportPath = path.join(logsDir, "preflight.report.json");
+      if (fs.existsSync(preflightReportPath)) {
+        const preflight = JSON.parse(fs.readFileSync(preflightReportPath, "utf8"));
+        const selected = String(preflight.selectedBrowser || "").trim();
+        if (selected) {
+          env.VTRACER_WEBDRIVER_BROWSER = selected;
+        }
+      }
+    } catch (_error) {
+      // fallback to default browserName in wdio config
+    }
+
+    let exitCode = 1;
+    for (let i = 1; i <= 2; i += 1) {
+      exitCode = await runWdioWithLogs(env, logsDir);
+      if (exitCode === 0) {
+        break;
+      }
+      await sleep(800);
+    }
     process.exit(exitCode);
   } finally {
     releaseAsciiRepoAlias(alias);
@@ -214,3 +254,8 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+
+
+
+

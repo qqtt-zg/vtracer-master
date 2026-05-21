@@ -1,4 +1,4 @@
-const fs = require("fs");
+﻿const fs = require("fs");
 const path = require("path");
 const http = require("http");
 const { spawn, spawnSync } = require("child_process");
@@ -132,10 +132,11 @@ async function readStatus(host, port) {
 }
 
 async function attemptCreateSession({ host, port, appPath, browserName }) {
+  const debugPort = Number(process.env.VTRACER_WEBVIEW_DEBUG_PORT || 9222);
   const tauriOptions = {
     application: appPath,
     webviewOptions: {
-      additionalBrowserArguments: ["--remote-debugging-port=9222"],
+      additionalBrowserArguments: [`--remote-debugging-port=${debugPort}`],
     },
   };
 
@@ -332,3 +333,5 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
+

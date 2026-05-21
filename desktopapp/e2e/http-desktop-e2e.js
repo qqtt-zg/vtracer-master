@@ -39,6 +39,16 @@ function releaseAsciiRepoAlias(alias) {
   runSubst([alias.drive, "/d"]);
 }
 
+function normalizeWindowsPathEnv(inputEnv) {
+  const env = { ...inputEnv };
+  if (process.platform === "win32") {
+    const pathValue = env.Path || env.PATH || "";
+    delete env.PATH;
+    env.Path = pathValue;
+  }
+  return env;
+}
+
 function requestText({ host, port, requestPath, method = "GET", headers = {}, body = "", timeoutMs = 30000 }) {
   return new Promise((resolve, reject) => {
     const payload = body || "";
@@ -96,48 +106,101 @@ async function waitForDriver(host, port, timeoutMs) {
     } catch (_error) {
       // keep polling
     }
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 250));
   }
   throw new Error(`timeout waiting tauri-driver on ${host}:${port}`);
 }
 
-async function createSession({ host, port, appPath }) {
-  const payload = {
-    capabilities: {
+async function createSession({ host, port, appPath, debugPort }) {
+  const candidates = [
+    {
+      label: "tauri",
       alwaysMatch: {
         browserName: "tauri",
         "tauri:options": {
           application: appPath,
           webviewOptions: {
-            additionalBrowserArguments: ["--remote-debugging-port=9222"],
+            additionalBrowserArguments: [`--remote-debugging-port=${debugPort}`, "--disable-gpu", "--disable-software-rasterizer"],
           },
         },
       },
-      firstMatch: [{}],
     },
-  };
+    {
+      label: "wry",
+      alwaysMatch: {
+        browserName: "wry",
+        "tauri:options": {
+          application: appPath,
+          webviewOptions: {
+            additionalBrowserArguments: [`--remote-debugging-port=${debugPort}`, "--disable-gpu", "--disable-software-rasterizer"],
+          },
+        },
+      },
+    },
+    {
+      label: "tauri-options-only",
+      alwaysMatch: {
+        "tauri:options": {
+          application: appPath,
+          webviewOptions: {
+            additionalBrowserArguments: [`--remote-debugging-port=${debugPort}`, "--disable-gpu", "--disable-software-rasterizer"],
+          },
+        },
+      },
+    },
+  ];
 
-  const response = await requestText({
-    host,
-    port,
-    requestPath: "/session",
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload),
-    timeoutMs: 60000,
-  });
-  if (response.statusCode < 200 || response.statusCode >= 300) {
-    throw new Error(`session create failed: status=${response.statusCode} body=${response.body}`);
+  const attempts = [];
+  const rounds = Number(process.env.VTRACER_E2E_CREATE_SESSION_ROUNDS || 2);
+
+  for (let round = 1; round <= rounds; round += 1) {
+    for (const candidate of candidates) {
+    const payload = {
+      capabilities: {
+        alwaysMatch: candidate.alwaysMatch,
+        firstMatch: [{}],
+      },
+    };
+
+    try {
+      const response = await requestText({
+        host,
+        port,
+        requestPath: "/session",
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+        timeoutMs: 60000,
+      });
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        attempts.push(`${candidate.label}:${response.statusCode}`);
+        continue;
+      }
+
+      const parsed = JSON.parse(response.body || "{}");
+      const sessionId = parsed?.value?.sessionId || parsed?.sessionId || "";
+      if (!sessionId) {
+        attempts.push(`${candidate.label}:missing-session-id:r${round}`);
+        continue;
+      }
+      return { sessionId, selectedBrowser: candidate.label };
+    } catch (error) {
+      attempts.push(`${candidate.label}:ERR:${String(error && error.message ? error.message : error)}:r${round}`);
+    }
+    }
+    if (round < rounds) {
+      await new Promise((resolve) => setTimeout(resolve, 400 * round));
+    }
   }
-  const parsed = JSON.parse(response.body || "{}");
-  const sessionId = parsed?.value?.sessionId || parsed?.sessionId || "";
-  if (!sessionId) {
-    throw new Error("session create missing sessionId");
-  }
-  return sessionId;
+
+  throw new Error(`session create failed -> ${attempts.join(" | ")}`);
 }
 
 async function deleteSession({ host, port, sessionId }) {
+  if (!sessionId) {
+    return;
+  }
   await requestText({
     host,
     port,
@@ -348,6 +411,14 @@ try {
   }
 }
 
+function shouldRetryError(error) {
+  const text = String(error && error.message ? error.message : error);
+  return text.includes('request timeout')
+    || text.includes('invalid session id')
+    || text.includes('not connected to DevTools')
+    || text.includes('session create failed');
+}
+
 async function main() {
   const repoRoot = path.resolve(__dirname, "..", "..");
   const logsDir = process.env.VTRACER_E2E_LOG_DIR || path.resolve(__dirname, ".artifacts", "logs");
@@ -359,9 +430,10 @@ async function main() {
   let alias = null;
   let driver = null;
   let sessionId = "";
-  const host = "127.0.0.1";
-  const port = 4555;
-  const nativePort = 9555;
+  const host = process.env.VTRACER_DRIVER_HOST || "127.0.0.1";
+  const port = Number(process.env.VTRACER_DRIVER_PORT || 4555);
+  const nativePort = Number(process.env.VTRACER_NATIVE_PORT || 9555);
+  const debugPort = Number(process.env.VTRACER_WEBVIEW_DEBUG_PORT || 9222);
 
   try {
     alias = createAsciiRepoAliasIfNeeded(repoRoot);
@@ -387,13 +459,19 @@ async function main() {
       throw new Error(`sample image not found: ${sampleImage}`);
     }
 
-    const env = {
+    const settingsDir = process.env.VTRACER_SETTINGS_DIR || path.resolve(__dirname, ".artifacts", "settings");
+    fs.mkdirSync(settingsDir, { recursive: true });
+
+    const envRaw = {
       ...process.env,
       TAURI_AUTOMATION: process.env.TAURI_AUTOMATION || "1",
       TAURI_WEBVIEW_AUTOMATION: process.env.TAURI_WEBVIEW_AUTOMATION || "1",
       VTRACER_E2E_ENABLED: process.env.VTRACER_E2E_ENABLED || "1",
-      VTRACER_SETTINGS_DIR: process.env.VTRACER_SETTINGS_DIR || path.resolve(process.env.TEMP || process.env.TMP || __dirname, "vtracer-desktop-e2e", "settings"),
+      VTRACER_WEBVIEW_DEBUG_PORT: String(debugPort),
+      VTRACER_SETTINGS_DIR: settingsDir,
     };
+
+    const env = normalizeWindowsPathEnv(envRaw);
 
     driver = spawn(tauriDriverPath, ["--native-driver", nativeDriverPath, "--port", String(port), "--native-port", String(nativePort)], {
       stdio: ["ignore", "pipe", "pipe"],
@@ -414,10 +492,43 @@ async function main() {
     });
 
     await waitForDriver(host, port, 30000);
-    sessionId = await createSession({ host, port, appPath });
-    await runScenario({ host, port, sessionId, sampleImage });
-    await deleteSession({ host, port, sessionId });
-    sessionId = "";
+
+    const scenarioRetries = Number(process.env.VTRACER_E2E_SCENARIO_RETRIES || 2);
+    let lastError = null;
+    for (let i = 1; i <= scenarioRetries; i += 1) {
+      try {
+        const created = await createSession({ host, port, appPath, debugPort });
+        sessionId = created.sessionId;
+        const stabilizeMs = Number(process.env.VTRACER_E2E_SESSION_STABILIZE_MS || 3000);
+        if (stabilizeMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, stabilizeMs));
+        }
+        await runScenario({ host, port, sessionId, sampleImage });
+        await deleteSession({ host, port, sessionId });
+        sessionId = "";
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (sessionId) {
+          try {
+            await deleteSession({ host, port, sessionId });
+          } catch (_err) {
+            // ignore cleanup failure
+          }
+          sessionId = "";
+        }
+        if (i >= scenarioRetries || !shouldRetryError(error)) {
+          throw error;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500 * i));
+      }
+    }
+
+    if (lastError) {
+      throw lastError;
+    }
+
     outStream.end();
     errStream.end();
   } finally {
@@ -440,4 +551,3 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-
