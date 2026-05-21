@@ -17,6 +17,7 @@ mod svg;
 pub use config::*;
 pub use converter::*;
 #[cfg(feature = "python-binding")]
+#[allow(unused_imports)]
 pub use python::*;
 pub use svg::*;
 pub use visioncortex::ColorImage;

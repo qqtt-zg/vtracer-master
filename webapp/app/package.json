@@ -8,7 +8,10 @@
   "main": "index.js",
   "scripts": {
     "start": "webpack-dev-server",
-    "build": "webpack"
+    "build": "node scripts/clean-dist.js && webpack && node scripts/assemble-dist.js",
+    "serve:dist": "node scripts/serve-dist.js",
+    "e2e:install-browser": "node scripts/install-playwright.js",
+    "test:e2e": "node scripts/run-playwright.js"
   },
   "keywords": [
     "rust",
@@ -19,6 +22,7 @@
     "webpack": "^4.41.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.54.2",
     "webpack-cli": "^3.3.11",
     "webpack-dev-server": "^3.10.1"
   }

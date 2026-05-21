@@ -8,7 +8,11 @@ module.exports = {
   },
   mode: "development",
   devServer: {
-  	//host: "0.0.0.0",
+    //host: "0.0.0.0",
+    contentBase: [
+      path.resolve(__dirname),
+      path.resolve(__dirname, "public"),
+    ],
     port: 8080,
   }
 };

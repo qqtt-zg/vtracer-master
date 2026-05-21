@@ -26,7 +26,7 @@ VTracer 是一个开源项目，用于将位图图像（`jpg/png`）转换为矢
 ## 命令行工具
 
 ```sh
-visioncortex VTracer 0.6.0
+visioncortex VTracer 0.6.12
 一个将图像转换为矢量图的命令行工具。
 
 USAGE:
@@ -50,3 +50,8 @@ cargo install vtracer
 ```sh
 ./vtracer --input input.jpg --output output.svg
 ```
+
+## 版本说明
+
+- 本文档中的 CLI 示例版本与 [`cmdapp/Cargo.toml`](Cargo.toml) 保持一致（当前 `0.6.12`）。
+- Python 包版本由 [`pyproject.toml`](pyproject.toml) 单独维护（当前 `0.6.15`）。

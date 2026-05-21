@@ -1,206 +1,827 @@
-﻿<!DOCTYPE html>
-<html>
-    <head>
-        <meta charset="utf-8">
-        <title>VTracer</title>
-        <link rel="apple-touch-icon" sizes="192x192" href="./assets/apple-icon.png">
-        <link rel="icon" type="image/png" sizes="192x192"  href="./assets/apple-icon.png">
-        <style>
-        html, body {
-            width: 100%;
-            height: 100%;
-            margin: 0;
-        }
-        .button {
-            cursor: pointer;
-            font-family: sans-serif;
-            border-radius: 2px;
-            border: 1px solid #aaa;
-            padding: 4px 8px;
-        }
-        #droptext {
-            border: 2px dashed #000;
-        }
-        #droptext.hovering {
-            border: 2px dashed #fff;
-        }
-        #canvas-container {
-            position: absolute;
-            left: 2.5%;
-            top: 5%;
-            width: 95%;
-            height: 90%;
-        }
-        #svg, #frame {
-            position: absolute;
-            width: 100%;
-            margin-bottom: 50px;
-        }
-        #svg > path:hover {
-            stroke: #ff0;
-        }
-        #droptext {
-            height: 100%;
-            text-align: center;
-        }
-        #options {
-            position: absolute;
-            left: 2.5%;
-            top: 5%;
-            padding: 50px;
-            background: rgba(255,255,255,0.5);
-        }
-        </style>
-    </head>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VTracer - 矢量化引擎</title>
+    <link rel="apple-touch-icon" sizes="192x192" href="./assets/apple-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="./assets/apple-icon.png">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+:root {
+    --bg-deep: #060b14;
+    --bg-surface: #0d1b2a;
+    --bg-panel: #0a1628;
+    --cyan: #00e5ff;
+    --cyan-dim: rgba(0,229,255,0.15);
+    --cyan-glow: rgba(0,229,255,0.4);
+    --blue-deep: #0a3d62;
+    --orange: #ff5722;
+    --text: #e0e6ed;
+    --text-dim: #7a8fa6;
+    --border: rgba(0,229,255,0.12);
+    --radius: 6px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; }
+body {
+    font-family: 'Noto Sans SC', sans-serif;
+    background: var(--bg-deep);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+}
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+        linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+    z-index: 0;
+    animation: gridPulse 8s ease-in-out infinite;
+}
+@keyframes gridPulse { 0%,100%{opacity:.6} 50%{opacity:1} }
+body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,229,255,0.008) 2px,rgba(0,229,255,0.008) 4px);
+    pointer-events: none;
+    z-index: 9999;
+}
+.topbar {
+    position: relative; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px;
+    background: linear-gradient(180deg, rgba(10,22,40,0.95), rgba(6,11,20,0.9));
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(10px); flex-shrink: 0;
+}
+.topbar::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cyan-glow), transparent);
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-name {
+    font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 20px;
+    letter-spacing: 3px; color: var(--cyan); text-shadow: 0 0 20px var(--cyan-glow);
+}
+.brand-tag {
+    font-size: 11px; color: var(--text-dim);
+    border: 1px solid var(--border); padding: 2px 8px; border-radius: 3px; letter-spacing: 1px;
+}
+.topbar-actions { display: flex; align-items: center; gap: 12px; }
+.btn {
+    font-family: 'Noto Sans SC', sans-serif; font-size: 13px; font-weight: 500;
+    padding: 8px 18px; border-radius: var(--radius); border: 1px solid var(--border);
+    background: transparent; color: var(--text); cursor: pointer; transition: all 0.2s;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+}
+.btn:hover { border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 12px var(--cyan-dim); }
+.btn-primary {
+    background: linear-gradient(135deg, rgba(0,229,255,0.15), rgba(0,229,255,0.05));
+    border-color: var(--cyan); color: var(--cyan);
+}
+.btn-primary:hover {
+    background: linear-gradient(135deg, rgba(0,229,255,0.3), rgba(0,229,255,0.1));
+    box-shadow: 0 0 20px var(--cyan-dim), inset 0 0 20px var(--cyan-dim);
+}
+.main { position: relative; z-index: 1; display: flex; flex: 1; overflow: hidden; }
+.preview-area { flex: 1; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+#drop {
+    flex: 1; position: relative; overflow: hidden; cursor: grab;
+    background: radial-gradient(ellipse at center, rgba(10,61,98,0.12) 0%, transparent 70%);
+}
+#drop:active { cursor: grabbing; }
+.viewport-content { position: absolute; transform-origin: 0 0; pointer-events: none; }
+#canvas-container { position: relative; display: block; pointer-events: auto; }
+#frame { display: block; max-width: none; min-height: 1px; }
+#svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: auto; shape-rendering: geometricPrecision; }
+#svg > path:hover { stroke: var(--orange); stroke-width: 1px; }
+</style>
+</head>
+<body>
+<style>
+.dropzone {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px;
+    border: 2px dashed var(--border); margin: 20px; border-radius: 12px; transition: all 0.3s;
+    z-index: 50;
+}
+.dropzone.hovering { border-color: var(--cyan); background: var(--cyan-dim); box-shadow: inset 0 0 60px var(--cyan-dim); }
+.dropzone.hidden { display: none; }
+.dropzone-icon {
+    width: 64px; height: 64px; border: 2px solid var(--cyan); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; animation: breathe 3s ease-in-out infinite;
+}
+@keyframes breathe { 0%,100%{box-shadow:0 0 10px var(--cyan-dim)} 50%{box-shadow:0 0 30px var(--cyan-glow)} }
+.dropzone-icon svg { width: 28px; height: 28px; stroke: var(--cyan); fill: none; }
+.dropzone-text { color: var(--text-dim); font-size: 14px; }
+.dropzone-text a { color: var(--cyan); text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s; }
+.dropzone-text a:hover { border-bottom-color: var(--cyan); }
+.zoom-bar {
+    display: flex; align-items: center; gap: 10px; padding: 8px 16px;
+    background: var(--bg-panel); border-top: 1px solid var(--border); flex-shrink: 0;
+}
+.zoom-bar .btn { padding: 5px 10px; font-size: 12px; }
+.zoom-percent { font-family: 'Orbitron', sans-serif; font-size: 12px; color: var(--cyan); min-width: 52px; text-align: center; }
+.zoom-slider {
+    flex: 1; max-width: 200px; -webkit-appearance: none; appearance: none;
+    height: 3px; background: var(--border); border-radius: 2px; outline: none;
+}
+.zoom-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--cyan); box-shadow: 0 0 8px var(--cyan-glow); cursor: pointer;
+}
+.progress-ring { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 100; display: none; }
+.progress-ring.active { display: block; }
+.progress-ring svg { transform: rotate(-90deg); }
+.progress-ring circle { fill: none; stroke-width: 4; }
+.progress-ring .track { stroke: var(--border); }
+.progress-ring .fill { stroke: var(--cyan); stroke-linecap: round; transition: stroke-dashoffset 0.3s; filter: drop-shadow(0 0 6px var(--cyan-glow)); }
+.progress-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-family: 'Orbitron', sans-serif; font-size: 14px; color: var(--cyan); }
+.panel {
+    width: 280px; flex-shrink: 0; background: var(--bg-panel); border-left: 1px solid var(--border);
+    overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; position: relative; z-index: 10;
+}
+.panel::-webkit-scrollbar { width: 4px; }
+.panel::-webkit-scrollbar-track { background: transparent; }
+.panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.panel-section { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; animation: fadeIn 0.4s ease both; }
+.panel-section:nth-child(2) { animation-delay: 0.1s; }
+.panel-section:nth-child(3) { animation-delay: 0.2s; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+.panel-header {
+    display: flex; align-items: center; justify-content: space-between; padding: 6px 10px;
+    background: rgba(0,229,255,0.03); cursor: pointer; user-select: none; transition: background 0.2s;
+}
+.panel-header:hover { background: rgba(0,229,255,0.06); }
+.panel-header h3 { font-size: 12px; font-weight: 500; letter-spacing: 0.5px; color: var(--text); }
+.panel-header .chevron { width: 16px; height: 16px; stroke: var(--text-dim); transition: transform 0.3s; }
+.panel-section.collapsed .panel-body { display: none; }
+.panel-section.collapsed .chevron { transform: rotate(-90deg); }
+.panel-body { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.btn-group { display: flex; gap: 2px; background: rgba(0,0,0,0.3); border-radius: var(--radius); padding: 3px; }
+.btn-group .btn-opt {
+    flex: 1; padding: 5px 8px; font-size: 12px; font-weight: 500; text-align: center;
+    border: none; border-radius: 4px; background: transparent; color: var(--text-dim);
+    cursor: pointer; transition: all 0.2s; font-family: 'Noto Sans SC', sans-serif;
+}
+.btn-group .btn-opt:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+.btn-group .btn-opt.selected { background: linear-gradient(135deg, rgba(0,229,255,0.2), rgba(0,229,255,0.08)); color: var(--cyan); box-shadow: 0 0 10px var(--cyan-dim); }
+.slider-control { display: flex; flex-direction: column; gap: 2px; }
+.slider-label { display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
+.slider-label span { color: var(--text-dim); }
+.slider-label .val { font-family: 'Orbitron', sans-serif; font-size: 10px; color: var(--cyan); min-width: 24px; text-align: right; }
+.slider-wrap input[type=range] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 4px;
+    background: linear-gradient(90deg, var(--cyan-dim), var(--border)); border-radius: 2px; outline: none; cursor: pointer;
+}
+.slider-wrap input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--bg-deep); border: 2px solid var(--cyan); box-shadow: 0 0 8px var(--cyan-glow); cursor: pointer;
+}
+.slider-wrap input[type=range]::-moz-range-thumb {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--bg-deep); border: 2px solid var(--cyan); box-shadow: 0 0 8px var(--cyan-glow); cursor: pointer;
+}
+.gallery { padding: 10px 16px; background: var(--bg-panel); border-top: 1px solid var(--border); flex-shrink: 0; position: relative; z-index: 10; }
+.gallery-scroll { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.gallery-scroll::-webkit-scrollbar { height: 4px; }
+.gallery-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.gallery-item {
+    flex-shrink: 0; width: 80px; height: 56px; border-radius: 4px; overflow: hidden;
+    border: 1px solid var(--border); cursor: pointer; transition: all 0.25s; position: relative;
+}
+.gallery-item:hover { border-color: var(--cyan); box-shadow: 0 0 12px var(--cyan-dim); transform: translateY(-2px); }
+.gallery-item img { width: 100%; height: 100%; object-fit: cover; }
+</style>
 
-    <body>
-        <input type="file" id="imageInput" accept="image/*" style="display: none;">
-        <div>
-            <div id="progressregion" style="display: none;">
-                <progress id="progressbar" value="0" max="100" style="width: 98%;"></progress>
+<input type="file" id="imageInput" accept="image/*" style="display:none">
+
+<!-- Top Bar -->
+<div class="topbar">
+    <div class="brand">
+        <span class="brand-name">VTRACER</span>
+        <span class="brand-tag">v0.6 矢量引擎</span>
+    </div>
+    <div class="topbar-actions">
+        <a class="btn" href="https://github.com/visioncortex/vtracer" target="_blank">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+            GitHub
+        </a>
+        <a id="export" class="btn btn-primary" href="#">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            导出 SVG
+        </a>
+        <a id="exportPdf" class="btn btn-primary" href="#" style="margin-left:8px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            导出 PDF
+        </a>
+    </div>
+</div>
+
+<!-- Main Content -->
+<div class="main">
+    <div class="preview-area">
+        <!-- Viewport -->
+        <div id="drop">
+            <div class="viewport-content" id="viewportContent">
+                <div id="canvas-container">
+                    <canvas id="frame"></canvas>
+                    <svg id="svg" version="1.1" xmlns="http://www.w3.org/2000/svg"></svg>
+                </div>
             </div>
-            <div>
-                <div id="drop">
-                    <div id="canvas-container">
-                        <div id="droptext">
-                            <p>将图片拖到这里，或<a href="#" id="imageSelect">选择文件</a></p>
-                        </div>
-                        <canvas id="frame"></canvas>
-                        <svg id="svg" version="1.1" xmlns="http://www.w3.org/2000/svg"></svg>
-                    </div>
+            <!-- Drop Zone -->
+            <div class="dropzone" id="droptext">
+                <div class="dropzone-icon">
+                    <svg viewBox="0 0 24 24" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 </div>
+                <p class="dropzone-text">拖拽图片到此处，Ctrl+V 粘贴，或 <a href="#" id="imageSelect">选择文件</a></p>
             </div>
-            <div id="options">
-                <div>
-                    <a class="button" id="export">下载为 SVG</a>    
-                </div>
+            <!-- Progress Ring -->
+            <div class="progress-ring" id="progressRing">
+                <svg width="80" height="80">
+                    <circle class="track" cx="40" cy="40" r="34"/>
+                    <circle class="fill" id="progressCircle" cx="40" cy="40" r="34" stroke-dasharray="213.6" stroke-dashoffset="213.6"/>
+                </svg>
+                <span class="progress-text" id="progressText">0%</span>
+            </div>
+        </div>
+        <!-- Hidden progress bar for compatibility -->
+        <div id="progressregion" style="display:none"><progress id="progressbar" value="0" max="100"></progress></div>
+        <!-- Zoom Bar -->
+        <div class="zoom-bar">
+            <button class="btn" id="toggleView">原图</button>
+            <button class="btn" id="zoomFit">适应</button>
+            <button class="btn" id="zoomReset">1:1</button>
+            <input type="range" class="zoom-slider" id="zoomSlider" min="10" max="2000" value="100">
+            <span class="zoom-percent" id="zoomPercent">100%</span>
+        </div>
+        <!-- Gallery -->
+        <div class="gallery">
+            <div class="gallery-scroll" id="galleryslider"></div>
+        </div>
+    </div>
 
-                <p></p>
-
-                <div>
-                    <div title="Algorithm for segmentation and grouping of pixel clusters">
-                        聚类
-                    </div>
+    <!-- Side Panel -->
+    <div class="panel" id="options">
+        <button class="btn btn-primary" id="autoParams" style="width:100%;justify-content:center;padding:6px 0;font-size:12px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 0-4 4c0 3 4 6 4 6s4-3 4-6a4 4 0 0 0-4-4z"/><path d="M12 16v6"/><path d="M8 22h8"/><circle cx="12" cy="6" r="1"/></svg>
+            智能调参
+        </button>
+        <div class="panel-section">
+            <div class="panel-header" onclick="this.parentElement.classList.toggle('collapsed')">
+                <h3>聚类模式</h3>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            <div class="panel-body">
+                <div class="btn-group">
+                    <button class="btn-opt" id="clustering-binary">黑白</button>
+                    <button class="btn-opt selected" id="clustering-color">彩色</button>
                 </div>
-
-                <div>
-                    <div>
-                        <button id="clustering-binary" title="黑白（二值图）">黑白</button>
-                        <button id="clustering-color" title="True 彩色 Image">彩色</button>
-                    </div>
+                <div class="btn-group clustering-color-options">
+                    <button class="btn-opt" id="clustering-cutout">剪切</button>
+                    <button class="btn-opt selected" id="clustering-stacked">堆叠</button>
                 </div>
-
-                <div>
-                    <div>
-                        <button id="clustering-cutout" title="形状与其他区域不重叠">剪切</button>
-                        <button id="clustering-stacked" title="形状按层叠放">叠层</button>
-                    </div>
+                <div class="slider-control">
+                    <div class="slider-label"><span>噪点过滤</span><span class="val" id="filterspecklevalue">4</span></div>
+                    <div class="slider-wrap"><input type="range" id="filterspeckle" min="0" max="128" step="1" value="4"></div>
                 </div>
-
-                <div>
-                    <div title="过滤面积小于 X 像素的色块">
-                        噪点过滤 <span>（更干净）</span>
-                    </div>
+                <div class="slider-control clustering-color-options">
+                    <div class="slider-label"><span>颜色精度</span><span class="val" id="colorprecisionvalue">6</span></div>
+                    <div class="slider-wrap"><input type="range" id="colorprecision" min="1" max="8" step="1" value="6"></div>
                 </div>
-                <div id="filterspecklevalue">
-                    4
+                <div class="slider-control clustering-color-options">
+                    <div class="slider-label"><span>渐变步长</span><span class="val" id="layerdifferencevalue">16</span></div>
+                    <div class="slider-wrap"><input type="range" id="layerdifference" min="0" max="128" step="1" value="16"></div>
                 </div>
-                <div>
-                    <input id="filterspeckle" type="range" min="1" max="16" step="1" value="4">
+                <div class="slider-control">
+                    <div class="slider-label"><span>忽略浅色</span><span class="val" id="lightthresholdvalue">0</span></div>
+                    <div class="slider-wrap"><input type="range" id="lightthreshold" min="0" max="255" step="1" value="0"></div>
                 </div>
-
-                <div class="clustering-color-options">
-                    <div title="每个 RGB 通道保留的有效位数">
-                        颜色精度 <span>（更精确）</span>
-                    </div>
+                <div class="slider-control">
+                    <div class="slider-label"><span>暗色归黑</span><span class="val" id="darkclampvalue">0</span></div>
+                    <div class="slider-wrap"><input type="range" id="darkclamp" min="0" max="128" step="1" value="0"></div>
                 </div>
-                <div id="colorprecisionvalue" class="clustering-color-options">
-                    6
+                <div class="slider-control">
+                    <div class="slider-label"><span>颜色量化</span><span class="val" id="quantizevalue">0</span></div>
+                    <div class="slider-wrap"><input type="range" id="quantize" min="0" max="7" step="1" value="0"></div>
                 </div>
-                <div class="clustering-color-options">
-                    <input id="colorprecision" type="range" min="1" max="8" step="1" value="6">
-                </div>
-
-                <div class="clustering-color-options">
-                    <div title="渐变层之间的颜色差值">
-                        渐变步长 <span>（层数更少）</span>
-                    </div>
-                </div>
-                <div id="layerdifferencevalue" class="clustering-color-options">
-                    16
-                </div>
-                <div class="clustering-color-options">
-                    <input id="layerdifference" type="range" min="0" max="255" step="1" value="16">
-                </div>
-
-                <p></p>
-
-                <div>
-                    <div title="Algorithm for converting clusters to shapes">
-                        曲线拟合
-                    </div>
-                </div>
-
-                <div>
-                    <div>
-                        <button id="none" title="精确保留像素边界">像素</button>
-                        <button id="polygon" title="简化为多边形">多边形</button>
-                        <button id="spline" class="selected" title="平滑并拟合曲线">样条</button>
-                    </div>
-                </div>
-
-                <div class="spline-options">
-                    <div title="判定为拐角的最小瞬时角度（度，平滑后仍保留）">
-                        拐角阈值 <span>（更平滑）</span>
-                    </div>
-                </div>
-                <div id="cornervalue" class="spline-options">
-                    60
-                </div>
-                <div class="spline-options">
-                    <input id="corner" type="range" min="0" max="180" step="1" value="60">
-                </div>
-
-                <div class="spline-options">
-                    <div title="迭代细分平滑，直到所有线段短于该长度">
-                        线段长度 <span>（更粗略）</span>
-                    </div>
-                </div>
-                <div id="lengthvalue" class="spline-options">
-                    4
-                </div>
-                <div class="spline-options">
-                    <input id="length" type="range" min="3.5" max="10" step="0.5" value="4">
-                </div>
-
-                <div class="spline-options">
-                    <div title="判定为曲线切分点的最小角位移（度）">
-                        拼接阈值 <span>（更精确）</span>
-                    </div>
-                </div>
-                <div id="splicevalue" class="spline-options">
-                    45
-                </div>
-                <div class="spline-options">
-                    <input id="splice" type="range" min="0" max="180" step="1" value="45">
-                </div>
-                
-                <div style="display: none">
-                <div class="spline-options">
-                    <div title="SVG 路径字符串小数位数">
-                        路径精度 <span>（更多位数）</span>
-                    </div>
-                </div>
-                <div id="pathprecisionvalue" class="spline-options">
-                    8
-                </div>
-                <div class="spline-options">
-                    <input id="pathprecision" class="uk-range" type="range" min="0" max="16" step="1" value="8">
-                </div>
+                <div class="slider-control">
+                    <div class="slider-label"><span>对比度增强</span><span class="val" id="contrastvalue">0</span></div>
+                    <div class="slider-wrap"><input type="range" id="contrast" min="0" max="10" step="1" value="0"></div>
                 </div>
             </div>
         </div>
-        <script src="./bootstrap.js"></script>
-    </body>
-</html>
+        <div class="panel-section">
+            <div class="panel-header" onclick="this.parentElement.classList.toggle('collapsed')">
+                <h3>路径拟合</h3>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            <div class="panel-body">
+                <div class="btn-group">
+                    <button class="btn-opt" id="none">像素</button>
+                    <button class="btn-opt" id="polygon">多边形</button>
+                    <button class="btn-opt selected" id="spline">样条曲线</button>
+                </div>
+                <div class="slider-control spline-options">
+                    <div class="slider-label"><span>角点阈值</span><span class="val" id="cornervalue">60</span></div>
+                    <div class="slider-wrap"><input type="range" id="corner" min="0" max="180" step="1" value="60"></div>
+                </div>
+                <div class="slider-control spline-options">
+                    <div class="slider-label"><span>线段长度</span><span class="val" id="lengthvalue">4</span></div>
+                    <div class="slider-wrap"><input type="range" id="length" min="3.5" max="10" step="0.5" value="4"></div>
+                </div>
+                <div class="slider-control spline-options">
+                    <div class="slider-label"><span>拼接阈值</span><span class="val" id="splicevalue">45</span></div>
+                    <div class="slider-wrap"><input type="range" id="splice" min="0" max="180" step="1" value="45"></div>
+                </div>
+                <div style="display:none">
+                    <input type="range" id="pathprecision" min="0" max="16" step="1" value="8">
+                    <span id="pathprecisionvalue">8</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div id="credits-modal" style="display:none"><div id="credits-modal-content"></div></div>
 
+<script>
+// Color preprocessing: monkey-patch getImageData
+var globalLightThreshold = 0;
+var globalDarkClamp = 0;
+var globalQuantize = 0;
+var globalContrast = 0;
+(function() {
+    var origGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+    CanvasRenderingContext2D.prototype.getImageData = function(x, y, w, h) {
+        var data = origGetImageData.call(this, x, y, w, h);
+        var lt = globalLightThreshold, dc = globalDarkClamp, q = globalQuantize, ct = globalContrast;
+        if (lt === 0 && dc === 0 && q === 0 && ct === 0) return data;
+        var px = data.data;
+        var factor = ct > 0 ? (259 * (ct * 25.5 + 128)) / (128 * (259 - ct * 25.5)) : 0;
+        for (var i = 0; i < px.length; i += 4) {
+            var r = px[i], g = px[i+1], b = px[i+2];
+            // Contrast enhancement first (S-curve on each channel)
+            if (ct > 0) {
+                r = Math.max(0, Math.min(255, ((r - 128) * factor + 128) | 0));
+                g = Math.max(0, Math.min(255, ((g - 128) * factor + 128) | 0));
+                b = Math.max(0, Math.min(255, ((b - 128) * factor + 128) | 0));
+                px[i] = r; px[i+1] = g; px[i+2] = b;
+            }
+            // Dark clamp: pixels where all channels <= threshold → pure black
+            if (dc > 0 && r <= dc && g <= dc && b <= dc) {
+                px[i] = 0; px[i+1] = 0; px[i+2] = 0; continue;
+            }
+            // Light threshold: pixels where all channels >= threshold → pure white
+            if (lt > 0 && r >= lt && g >= lt && b >= lt) {
+                px[i] = 255; px[i+1] = 255; px[i+2] = 255; continue;
+            }
+            // Quantize: reduce color depth by shifting bits
+            if (q > 0) {
+                var mask = (0xFF << q) & 0xFF;
+                var half = (1 << (q - 1));
+                px[i]   = Math.min(255, (r & mask) + half);
+                px[i+1] = Math.min(255, (g & mask) + half);
+                px[i+2] = Math.min(255, (b & mask) + half);
+            }
+        }
+        return data;
+    };
+})();
+</script>
+
+<script>
+(function() {
+    // Zoom & Pan state
+    let scale = 1, panX = 0, panY = 0, isPanning = false, startX = 0, startY = 0;
+    const viewport = document.getElementById('drop');
+    const content = document.getElementById('viewportContent');
+    const zoomSlider = document.getElementById('zoomSlider');
+    const zoomPercent = document.getElementById('zoomPercent');
+    const progressRing = document.getElementById('progressRing');
+    const progressCircle = document.getElementById('progressCircle');
+    const progressTextEl = document.getElementById('progressText');
+    const circumference = 2 * Math.PI * 34;
+
+    function updateTransform() {
+        content.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+        zoomSlider.value = Math.round(scale * 100);
+        zoomPercent.textContent = Math.round(scale * 100) + '%';
+    }
+
+    function zoomTo(newScale, cx, cy) {
+        const oldScale = scale;
+        newScale = Math.max(0.1, Math.min(20, newScale));
+        const rect = viewport.getBoundingClientRect();
+        cx = cx !== undefined ? cx : rect.width / 2;
+        cy = cy !== undefined ? cy : rect.height / 2;
+        panX = cx - (cx - panX) * (newScale / oldScale);
+        panY = cy - (cy - panY) * (newScale / oldScale);
+        scale = newScale;
+        updateTransform();
+    }
+
+    // Mouse wheel zoom
+    viewport.addEventListener('wheel', function(e) {
+        e.preventDefault();
+        const rect = viewport.getBoundingClientRect();
+        const cx = e.clientX - rect.left;
+        const cy = e.clientY - rect.top;
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        zoomTo(scale * delta, cx, cy);
+    }, {passive: false});
+
+    // Pan with middle mouse or left mouse when not on dropzone
+    viewport.addEventListener('mousedown', function(e) {
+        if (e.target.closest('.dropzone') || e.target.closest('a')) return;
+        isPanning = true;
+        startX = e.clientX - panX;
+        startY = e.clientY - panY;
+        viewport.style.cursor = 'grabbing';
+        e.preventDefault();
+    });
+    document.getElementById('canvas-container').addEventListener('mousedown', function(e) {
+        isPanning = true;
+        startX = e.clientX - panX;
+        startY = e.clientY - panY;
+        viewport.style.cursor = 'grabbing';
+        e.preventDefault();
+    });
+    document.addEventListener('mousemove', function(e) {
+        if (!isPanning) return;
+        panX = e.clientX - startX;
+        panY = e.clientY - startY;
+        updateTransform();
+    });
+    document.addEventListener('mouseup', function() {
+        isPanning = false;
+        viewport.style.cursor = 'grab';
+    });
+
+    // Touch pinch zoom
+    let lastTouchDist = 0;
+    viewport.addEventListener('touchstart', function(e) {
+        if (e.touches.length === 2) {
+            lastTouchDist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+        } else if (e.touches.length === 1 && !e.target.closest('.dropzone')) {
+            isPanning = true;
+            startX = e.touches[0].clientX - panX;
+            startY = e.touches[0].clientY - panY;
+        }
+    });
+    viewport.addEventListener('touchmove', function(e) {
+        if (e.touches.length === 2) {
+            e.preventDefault();
+            const dist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            if (lastTouchDist > 0) {
+                const delta = dist / lastTouchDist;
+                const rect = viewport.getBoundingClientRect();
+                const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+                const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+                zoomTo(scale * delta, cx, cy);
+            }
+            lastTouchDist = dist;
+        } else if (isPanning && e.touches.length === 1) {
+            panX = e.touches[0].clientX - startX;
+            panY = e.touches[0].clientY - startY;
+            updateTransform();
+        }
+    }, {passive: false});
+    viewport.addEventListener('touchend', function() { isPanning = false; lastTouchDist = 0; });
+
+    // Zoom controls
+    zoomSlider.addEventListener('input', function() { zoomTo(this.value / 100); });
+    document.getElementById('zoomFit').addEventListener('click', function() {
+        const container = document.getElementById('canvas-container');
+        const vw = viewport.clientWidth, vh = viewport.clientHeight;
+        const cw = container.offsetWidth || 400, ch = container.offsetHeight || 300;
+        const fitScale = Math.min(vw / cw, vh / ch) * 0.9;
+        scale = Math.max(fitScale, 0.5);
+        panX = (vw - cw * scale) / 2;
+        panY = (vh - ch * scale) / 2;
+        updateTransform();
+    });
+    document.getElementById('zoomReset').addEventListener('click', function() {
+        scale = 1; panX = 0; panY = 0; updateTransform();
+    });
+
+    // Toggle original/vector view
+    var viewMode = 'vector';
+    var toggleBtn = document.getElementById('toggleView');
+    toggleBtn.addEventListener('click', function() {
+        var svgEl = document.getElementById('svg');
+        var frameEl = document.getElementById('frame');
+        if (viewMode === 'vector') {
+            viewMode = 'original';
+            svgEl.style.display = 'none';
+            frameEl.style.display = 'block';
+            frameEl.style.visibility = 'visible';
+            frameEl.style.opacity = '1';
+            toggleBtn.textContent = '矢量';
+            toggleBtn.classList.add('selected');
+        } else {
+            viewMode = 'vector';
+            svgEl.style.display = '';
+            frameEl.style.visibility = 'hidden';
+            toggleBtn.textContent = '原图';
+            toggleBtn.classList.remove('selected');
+        }
+    });
+
+    // Progress ring - poll the hidden progressbar
+    const progressbar = document.getElementById('progressbar');
+    const progressregion = document.getElementById('progressregion');
+    let lastProgressVal = -1;
+    setInterval(function() {
+        const val = progressbar.value;
+        const max = progressbar.max;
+        const visible = progressregion.style.display !== 'none';
+        if (val !== lastProgressVal || visible !== progressRing.classList.contains('active')) {
+            lastProgressVal = val;
+            const pct = Math.round((val / max) * 100);
+            const offset = circumference - (val / max) * circumference;
+            progressCircle.style.strokeDashoffset = offset;
+            progressTextEl.textContent = pct + '%';
+            if (visible) {
+                progressRing.classList.add('active');
+            } else {
+                progressRing.classList.remove('active');
+            }
+        }
+    }, 50);
+
+    // Style gallery items injected by the bundle
+    const galleryObserver = new MutationObserver(function() {
+        document.querySelectorAll('#galleryslider li').forEach(function(li) {
+            li.style.cssText = 'list-style:none;display:inline-block;';
+            var div = li.querySelector('.galleryitem');
+            if (div && !div.classList.contains('styled')) {
+                div.classList.add('styled');
+                div.style.cssText = 'width:80px;height:56px;border-radius:4px;overflow:hidden;border:1px solid rgba(0,229,255,0.12);cursor:pointer;transition:all 0.25s;flex-shrink:0;display:inline-block;';
+                var img = div.querySelector('img');
+                if (img) img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+            }
+        });
+    });
+    var gs = document.getElementById('galleryslider');
+    if (gs) galleryObserver.observe(gs, {childList: true, subtree: true});
+
+    // Intercept canvas display:none to use visibility:hidden instead (preserves layout for SVG overlay)
+    const frame = document.getElementById('frame');
+    var observerGuard = false;
+    const canvasObserver = new MutationObserver(function() {
+        if (observerGuard) return;
+        observerGuard = true;
+        if (frame.style.display === 'none') {
+            frame.style.display = 'block';
+            frame.style.visibility = viewMode === 'vector' ? 'hidden' : 'visible';
+        }
+        // Reset toggle when new conversion starts (SVG gets cleared)
+        if (document.getElementById('svg').children.length === 0 && viewMode === 'original') {
+            viewMode = 'vector';
+            document.getElementById('svg').style.display = '';
+            frame.style.visibility = 'hidden';
+            toggleBtn.textContent = '原图';
+            toggleBtn.classList.remove('selected');
+        }
+        observerGuard = false;
+    });
+    canvasObserver.observe(frame, {attributes: true, attributeFilter: ['style']});
+
+    // Override canvas-container sizing: bundle sets percentage width/marginBottom for responsive layout,
+    // but we need pixel dimensions for the zoom/pan viewport
+    const canvasContainer = document.getElementById('canvas-container');
+    const containerObserver = new MutationObserver(function() {
+        if (frame.width && frame.height) {
+            canvasContainer.style.width = frame.width + 'px';
+            canvasContainer.style.height = frame.height + 'px';
+            canvasContainer.style.marginBottom = '0';
+            // Auto-fit after image loads
+            const vw = viewport.clientWidth, vh = viewport.clientHeight;
+            const cw = frame.width, ch = frame.height;
+            const fitScale = Math.min(vw / cw, vh / ch) * 0.9;
+            scale = Math.max(fitScale, 0.5);
+            panX = (vw - cw * scale) / 2;
+            panY = (vh - ch * scale) / 2;
+            updateTransform();
+        }
+    });
+    containerObserver.observe(canvasContainer, {attributes: true, attributeFilter: ['style']});
+
+    // Light threshold slider
+    document.getElementById('lightthreshold').addEventListener('change', function() {
+        globalLightThreshold = parseInt(this.value);
+        document.getElementById('lightthresholdvalue').innerHTML = this.value;
+        document.getElementById('filterspeckle').dispatchEvent(new Event('change'));
+    });
+
+    // Dark clamp slider
+    document.getElementById('darkclamp').addEventListener('change', function() {
+        globalDarkClamp = parseInt(this.value);
+        document.getElementById('darkclampvalue').innerHTML = this.value;
+        document.getElementById('filterspeckle').dispatchEvent(new Event('change'));
+    });
+
+    // Quantize slider
+    document.getElementById('quantize').addEventListener('change', function() {
+        globalQuantize = parseInt(this.value);
+        document.getElementById('quantizevalue').innerHTML = this.value;
+        document.getElementById('filterspeckle').dispatchEvent(new Event('change'));
+    });
+
+    // Contrast slider
+    document.getElementById('contrast').addEventListener('change', function() {
+        globalContrast = parseInt(this.value);
+        document.getElementById('contrastvalue').innerHTML = this.value;
+        document.getElementById('filterspeckle').dispatchEvent(new Event('change'));
+    });
+
+    // Auto params - analyze image and recommend settings
+    document.getElementById('autoParams').addEventListener('click', function() {
+        var canvas = document.getElementById('frame');
+        if (!canvas.width || !canvas.height) return;
+        var ctx = canvas.getContext('2d');
+        var origGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+        // Use original getImageData to avoid our preprocessing
+        var imageData = origGetImageData.call(ctx, 0, 0, canvas.width, canvas.height);
+        var px = imageData.data;
+        var totalPixels = px.length / 4;
+
+        // 1. Build histogram and color stats
+        var histogram = new Uint32Array(256);
+        var colorSet = new Set();
+        var rSum = 0, gSum = 0, bSum = 0;
+        var darkCount = 0, lightCount = 0, midCount = 0;
+        var saturationSum = 0;
+        var edgeCount = 0;
+        var w = canvas.width;
+
+        for (var i = 0; i < px.length; i += 4) {
+            var r = px[i], g = px[i+1], b = px[i+2];
+            var luma = (r * 299 + g * 587 + b * 114) / 1000 | 0;
+            histogram[luma]++;
+            rSum += r; gSum += g; bSum += b;
+
+            if (luma < 50) darkCount++;
+            else if (luma > 205) lightCount++;
+            else midCount++;
+
+            // Quantized color for uniqueness count
+            var qr = (r >> 4), qg = (g >> 4), qb = (b >> 4);
+            colorSet.add((qr << 8) | (qg << 4) | qb);
+
+            // Saturation
+            var maxC = Math.max(r, g, b), minC = Math.min(r, g, b);
+            if (maxC > 0) saturationSum += (maxC - minC) / maxC;
+
+            // Edge detection (horizontal gradient)
+            var pi = i / 4;
+            if (pi % w < w - 1) {
+                var nr = px[i+4], ng = px[i+5], nb = px[i+6];
+                var diff = Math.abs(r - nr) + Math.abs(g - ng) + Math.abs(b - nb);
+                if (diff > 80) edgeCount++;
+            }
+        }
+
+        var darkRatio = darkCount / totalPixels;
+        var lightRatio = lightCount / totalPixels;
+        var midRatio = midCount / totalPixels;
+        var uniqueColors = colorSet.size;
+        var avgSaturation = saturationSum / totalPixels;
+        var edgeRatio = edgeCount / totalPixels;
+
+        // 2. Classify image type
+        var type, params;
+        var isBW = avgSaturation < 0.08;
+        var isFewColors = uniqueColors < 400;
+        var isHighContrast = midRatio < 0.1;
+        var isDarkBg = darkRatio > 0.5;
+        var isLightBg = lightRatio > 0.5;
+        var isBimodal = (darkRatio + lightRatio) > 0.85;
+        var isLineArt = isBW && edgeRatio > 0.02 && isBimodal;
+        var isLogo = isFewColors && isBimodal;
+        var isPhoto = uniqueColors > 400 && avgSaturation > 0.15 && midRatio > 0.5;
+        var isIllustration = uniqueColors > 200 && !isBimodal && !isPhoto;
+
+        console.log('[智能调参] features:', JSON.stringify({uniqueColors:uniqueColors, darkRatio:darkRatio.toFixed(3), lightRatio:lightRatio.toFixed(3), midRatio:midRatio.toFixed(3), avgSat:avgSaturation.toFixed(3), edgeRatio:edgeRatio.toFixed(4), isBW:isBW, isFewColors:isFewColors, isHighContrast:isHighContrast, isBimodal:isBimodal, isLineArt:isLineArt, isLogo:isLogo, isPhoto:isPhoto, isIllustration:isIllustration}));
+        if (isLineArt) {
+            type = '线稿';
+            params = {
+                clustering_mode: 'binary', filter_speckle: 4, color_precision: 6,
+                layer_difference: 16, corner: 60, length: 4, splice: 45,
+                light: 0, dark: 0, quantize: 0, contrast: 0, mode: 'spline'
+            };
+        } else if (isLogo && isHighContrast) {
+            type = 'Logo/图标(高对比)';
+            params = {
+                clustering_mode: 'color', filter_speckle: 4, color_precision: 8,
+                layer_difference: 128, corner: 60, length: 4, splice: 45,
+                light: 220, dark: 40, quantize: 0, contrast: 5, mode: 'spline'
+            };
+        } else if (isLogo) {
+            type = 'Logo/图标';
+            params = {
+                clustering_mode: 'color', filter_speckle: 4, color_precision: 8,
+                layer_difference: 64, corner: 60, length: 4, splice: 45,
+                light: 0, dark: 0, quantize: 0, contrast: 3, mode: 'spline'
+            };
+        } else if (isIllustration) {
+            type = '插画/矢量图';
+            params = {
+                clustering_mode: 'color', filter_speckle: 4, color_precision: 8,
+                layer_difference: 32, corner: 60, length: 4, splice: 45,
+                light: 0, dark: 0, quantize: 2, contrast: 0, mode: 'spline'
+            };
+        } else if (isPhoto) {
+            type = '照片';
+            params = {
+                clustering_mode: 'color', filter_speckle: 10, color_precision: 8,
+                layer_difference: 48, corner: 180, length: 4, splice: 45,
+                light: 0, dark: 0, quantize: 0, contrast: 0, mode: 'spline'
+            };
+        } else {
+            type = '通用';
+            params = {
+                clustering_mode: 'color', filter_speckle: 4, color_precision: 6,
+                layer_difference: 25, corner: 60, length: 4, splice: 45,
+                light: 0, dark: 0, quantize: 0, contrast: 0, mode: 'spline'
+            };
+        }
+
+        // 3. Apply params to UI
+        function setSlider(id, valId, val) {
+            document.getElementById(id).value = val;
+            document.getElementById(valId).innerHTML = val;
+        }
+        setSlider('filterspeckle', 'filterspecklevalue', params.filter_speckle);
+        setSlider('colorprecision', 'colorprecisionvalue', params.color_precision);
+        setSlider('layerdifference', 'layerdifferencevalue', params.layer_difference);
+        setSlider('corner', 'cornervalue', params.corner);
+        setSlider('length', 'lengthvalue', params.length);
+        setSlider('splice', 'splicevalue', params.splice);
+        setSlider('lightthreshold', 'lightthresholdvalue', params.light);
+        setSlider('darkclamp', 'darkclampvalue', params.dark);
+        setSlider('quantize', 'quantizevalue', params.quantize);
+        setSlider('contrast', 'contrastvalue', params.contrast);
+
+        globalLightThreshold = params.light;
+        globalDarkClamp = params.dark;
+        globalQuantize = params.quantize;
+        globalContrast = params.contrast;
+
+        // Click clustering mode button
+        document.getElementById('clustering-' + params.clustering_mode).click();
+        // Click path mode button
+        document.getElementById(params.mode === 'spline' ? 'spline' : params.mode === 'polygon' ? 'polygon' : 'none').click();
+
+        // Show detected type
+        this.textContent = '智能调参 → ' + type;
+        var btn = this;
+        setTimeout(function() {
+            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 0-4 4c0 3 4 6 4 6s4-3 4-6a4 4 0 0 0-4-4z"/><path d="M12 16v6"/><path d="M8 22h8"/><circle cx="12" cy="6" r="1"/></svg> 智能调参';
+        }, 3000);
+    });
+})();
+</script>
+<script src="./jspdf.umd.min.js"></script>
+<script src="./svg2pdf.umd.min.js"></script>
+<script>
+document.getElementById('exportPdf').addEventListener('click', function(e) {
+    e.preventDefault();
+    const svgEl = document.getElementById('svg');
+    if (!svgEl.children.length) return;
+
+    const vb = svgEl.getAttribute('viewBox');
+    if (!vb) return;
+    const [, , w, h] = vb.split(/\s+/).map(Number);
+
+    const pxPerPt = 72 / 96;
+    const pdfW = w * pxPerPt;
+    const pdfH = h * pxPerPt;
+    const orientation = pdfW > pdfH ? 'l' : 'p';
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({orientation: orientation, unit: 'pt', format: [pdfW, pdfH]});
+
+    const clone = svgEl.cloneNode(true);
+    clone.setAttribute('width', w);
+    clone.setAttribute('height', h);
+
+    pdf.svg(clone, {x: 0, y: 0, width: pdfW, height: pdfH}).then(function() {
+        pdf.save('vtracer-export-' + new Date().toISOString().slice(0,10) + '.pdf');
+    });
+});
+</script>
+<script src="./bootstrap.js"></script>
+</body>
+</html>

@@ -36,10 +36,15 @@ VTracer 核心由 Rust 实现，并通过 wasm 提供 Web 交互能力。
 ![screenshot](docs/images/screenshot-01.png)
 ![screenshot](docs/images/screenshot-02.png)
 
+Web 发布流程说明：
+- 前端源码目录：`webapp/app`
+- 发布产物目录：`docs`（由构建同步生成，不直接手改业务逻辑）
+- 一键构建同步命令：`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-sync-web-docs.ps1`
+
 ## 命令行工具（Cmd App）
 
 ```sh
-visioncortex VTracer 0.6.0
+visioncortex VTracer 0.6.12
 一个将图像转换为矢量图的命令行工具。
 
 USAGE:
@@ -80,11 +85,17 @@ cargo add vtracer
 
 ## 作为 Python 包使用
 
-自 `0.6` 起，项目也提供 Python 原生扩展（基于 pyo3）：
+当前 Python 包版本为 `0.6.15`（基于 pyo3）：
 
 ```sh
 pip install vtracer
 ```
+
+## 版本来源说明
+
+- CLI/Rust 版本以 [`cmdapp/Cargo.toml`](cmdapp/Cargo.toml) 为准（当前 `0.6.12`）。
+- Python 包版本以 [`cmdapp/pyproject.toml`](cmdapp/pyproject.toml) 为准（当前 `0.6.15`）。
+- 两者可独立发布，版本号不同步属于正常情况。
 
 ## 引用与相关工作
 

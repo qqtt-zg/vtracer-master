@@ -1,6 +1,6 @@
 use crate::*;
 use image::{io::Reader, ImageFormat};
-use pyo3::{exceptions::PyException, prelude::*};
+use pyo3::{exceptions::{PyRuntimeError, PyValueError}, prelude::*};
 use std::io::{BufReader, Cursor};
 use std::path::PathBuf;
 use visioncortex::PathSimplifyMode;
@@ -37,9 +37,10 @@ fn convert_image_to_svg_py(
         max_iterations,
         splice_threshold,
         path_precision,
-    );
+    )
+    .map_err(PyValueError::new_err)?;
 
-    convert_image_to_svg(&input_path, &output_path, config).unwrap();
+    convert_image_to_svg(&input_path, &output_path, config).map_err(PyRuntimeError::new_err)?;
     Ok(())
 }
 
@@ -71,7 +72,8 @@ fn convert_raw_image_to_svg(
         max_iterations,
         splice_threshold,
         path_precision,
-    );
+    )
+    .map_err(PyValueError::new_err)?;
     let mut img_reader = Reader::new(BufReader::new(Cursor::new(img_bytes)));
     let img_format = img_format.and_then(|ext_name| ImageFormat::from_extension(ext_name));
     let img = match img_format {
@@ -81,12 +83,12 @@ fn convert_raw_image_to_svg(
         }
         None => img_reader
             .with_guessed_format()
-            .map_err(|_| PyException::new_err("Unrecognized image format. "))?
+            .map_err(|_| PyValueError::new_err("无法识别图像格式。"))?
             .decode(),
     };
     let img = match img {
         Ok(img) => img.to_rgba8(),
-        Err(_) => return Err(PyException::new_err("Failed to decode img_bytes. ")),
+        Err(_) => return Err(PyValueError::new_err("无法解码 img_bytes。")),
     };
     let (width, height) = (img.width() as usize, img.height() as usize);
     let img = ColorImage {
@@ -94,8 +96,7 @@ fn convert_raw_image_to_svg(
         width,
         height,
     };
-    let svg =
-        convert(img, config).map_err(|_| PyException::new_err("Failed to convert the image. "))?;
+    let svg = convert(img, config).map_err(PyRuntimeError::new_err)?;
     Ok(format!("{}", svg))
 }
 
@@ -117,8 +118,8 @@ fn convert_pixels_to_svg(
 ) -> PyResult<String> {
     let expected_pixel_count = size.0 * size.1;
     if rgba_pixels.len() != expected_pixel_count {
-        return Err(PyException::new_err(format!(
-            "Length of rgba_pixels does not match given image size. Expected {} ({} * {}), got {}. ",
+        return Err(PyValueError::new_err(format!(
+            "rgba_pixels 长度与图像尺寸不匹配。期望 {} ({} * {}), 实际 {}。",
             expected_pixel_count,
             size.0,
             size.1,
@@ -137,7 +138,8 @@ fn convert_pixels_to_svg(
         max_iterations,
         splice_threshold,
         path_precision,
-    );
+    )
+    .map_err(PyValueError::new_err)?;
     let mut flat_pixels: Vec<u8> = vec![];
     for (r, g, b, a) in rgba_pixels {
         flat_pixels.push(r);
@@ -149,8 +151,7 @@ fn convert_pixels_to_svg(
     img.pixels = flat_pixels;
     (img.width, img.height) = size;
 
-    let svg =
-        convert(img, config).map_err(|_| PyException::new_err("Failed to convert the image. "))?;
+    let svg = convert(img, config).map_err(PyRuntimeError::new_err)?;
     Ok(format!("{}", svg))
 }
 
@@ -166,26 +167,29 @@ fn construct_config(
     max_iterations: Option<usize>,
     splice_threshold: Option<i32>,
     path_precision: Option<u32>,
-) -> Config {
-    // TODO: enforce color mode with an enum so that we only
-    // accept the strings 'color' or 'binary'
-    let color_mode = match colormode.unwrap_or("color") {
+) -> Result<Config, String> {
+    let color_mode = match colormode.unwrap_or("color").trim().to_ascii_lowercase().as_str() {
         "color" => ColorMode::Color,
         "binary" => ColorMode::Binary,
-        _ => ColorMode::Color,
+        other => return Err(format!("无效的 colormode: {other}，仅支持 color 或 binary")),
     };
 
-    let hierarchical = match hierarchical.unwrap_or("stacked") {
+    let hierarchical = match hierarchical
+        .unwrap_or("stacked")
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
         "stacked" => Hierarchical::Stacked,
         "cutout" => Hierarchical::Cutout,
-        _ => Hierarchical::Stacked,
+        other => return Err(format!("无效的 hierarchical: {other}，仅支持 stacked 或 cutout")),
     };
 
-    let mode = match mode.unwrap_or("spline") {
+    let mode = match mode.unwrap_or("spline").trim().to_ascii_lowercase().as_str() {
         "spline" => PathSimplifyMode::Spline,
         "polygon" => PathSimplifyMode::Polygon,
         "none" => PathSimplifyMode::None,
-        _ => PathSimplifyMode::Spline,
+        other => return Err(format!("无效的 mode: {other}，仅支持 spline/polygon/none")),
     };
 
     let filter_speckle = filter_speckle.unwrap_or(4);
@@ -196,7 +200,38 @@ fn construct_config(
     let splice_threshold = splice_threshold.unwrap_or(45);
     let max_iterations = max_iterations.unwrap_or(10);
 
-    Config {
+    if filter_speckle > 16 {
+        return Err(format!(
+            "filter_speckle={filter_speckle} 超出范围，必须在 [0,16]"
+        ));
+    }
+    if !(1..=8).contains(&color_precision) {
+        return Err(format!(
+            "color_precision={color_precision} 超出范围，必须在 [1,8]"
+        ));
+    }
+    if !(0..=255).contains(&layer_difference) {
+        return Err(format!(
+            "layer_difference={layer_difference} 超出范围，必须在 [0,255]"
+        ));
+    }
+    if !(0..=180).contains(&corner_threshold) {
+        return Err(format!(
+            "corner_threshold={corner_threshold} 超出范围，必须在 [0,180]"
+        ));
+    }
+    if !(3.5..=10.0).contains(&length_threshold) {
+        return Err(format!(
+            "length_threshold={length_threshold} 超出范围，必须在 [3.5,10]"
+        ));
+    }
+    if !(0..=180).contains(&splice_threshold) {
+        return Err(format!(
+            "splice_threshold={splice_threshold} 超出范围，必须在 [0,180]"
+        ));
+    }
+
+    Ok(Config {
         color_mode,
         hierarchical,
         filter_speckle,
@@ -209,7 +244,7 @@ fn construct_config(
         splice_threshold,
         path_precision,
         ..Default::default()
-    }
+    })
 }
 
 /// A Python module implemented in Rust.
@@ -219,4 +254,63 @@ fn vtracer(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(convert_raw_image_to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(convert_pixels_to_svg, m)?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn construct_config_rejects_invalid_mode() {
+        let result = construct_config(
+            Some("color"),
+            Some("stacked"),
+            Some("bad-mode"),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn construct_config_rejects_invalid_color_mode() {
+        let result = construct_config(
+            Some("invalid"),
+            Some("stacked"),
+            Some("spline"),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn construct_config_rejects_invalid_range() {
+        let result = construct_config(
+            Some("color"),
+            Some("stacked"),
+            Some("spline"),
+            Some(32),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert!(result.is_err());
+    }
 }

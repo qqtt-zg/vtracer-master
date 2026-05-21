@@ -42,3 +42,21 @@ npm run start
 ```sh
 npm run build
 ```
+
+## 单一事实源与发布目录
+
+- 前端源码以 `webapp/app` 为唯一事实源。
+- `docs` 目录仅存放构建后的发布产物，不直接手改业务逻辑。
+
+## 一键构建并同步到 docs
+
+在仓库根目录执行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-sync-web-docs.ps1
+```
+
+该命令会执行：
+1. `wasm-pack build --target web`
+2. `webapp/app` 前端打包
+3. 将 `webapp/app/dist` 全量同步到 `docs`

@@ -1,4 +1,4 @@
-import { BinaryImageConverter, ColorImageConverter } from 'vtracer';
+import init, { BinaryImageConverter, ColorImageConverter } from 'vtracer';
 
 let runner;
 const canvas = document.getElementById('frame');
@@ -8,6 +8,20 @@ const img = new Image();
 const progress = document.getElementById('progressbar');
 const progressregion = document.getElementById('progressregion');
 let mode = 'spline', clustering_mode = 'color', clustering_hierarchical = 'stacked';
+let wasmReady = false;
+let pendingRestart = false;
+
+init()
+    .then(() => {
+        wasmReady = true;
+        if (pendingRestart) {
+            pendingRestart = false;
+            restart();
+        }
+    })
+    .catch((err) => {
+        console.error('WASM init failed:', err);
+    });
 
 // Hide canas and svg on load
 canvas.style.display = 'none';
@@ -384,6 +398,11 @@ function setSourceAndRestart(source) {
 }
 
 function restart() {
+    if (!wasmReady) {
+        pendingRestart = true;
+        return;
+    }
+
     document.getElementById('clustering-binary').classList.remove('selected');
     document.getElementById('clustering-color').classList.remove('selected');
     document.getElementById('clustering-' + clustering_mode).classList.add('selected');
