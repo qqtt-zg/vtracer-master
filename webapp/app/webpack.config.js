@@ -2,6 +2,11 @@ const path = require('path');
 
 module.exports = {
   entry: "./bootstrap.js",
+  resolve: {
+    alias: {
+      "vtracer-webapp$": path.resolve(__dirname, "generated", "vtracer_webapp_compat.js"),
+    },
+  },
   output: {
     path: path.resolve(__dirname, "dist"),
     filename: "bootstrap.js",
