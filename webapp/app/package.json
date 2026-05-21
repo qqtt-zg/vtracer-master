@@ -18,7 +18,7 @@
     "wasm"
   ],
   "dependencies": {
-    "vtracer": "file:../pkg",
+    "vtracer-webapp": "file:../pkg",
     "webpack": "^4.41.5"
   },
   "devDependencies": {
@@ -27,3 +27,4 @@
     "webpack-dev-server": "^3.10.1"
   }
 }
+
