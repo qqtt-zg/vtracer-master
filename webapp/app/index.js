@@ -1,4 +1,4 @@
-import init, { BinaryImageConverter, ColorImageConverter } from 'vtracer';
+﻿import init, { BinaryImageConverter, ColorImageConverter } from 'vtracer';
 
 let runner;
 const canvas = document.getElementById('frame');
@@ -10,6 +10,14 @@ const progressregion = document.getElementById('progressregion');
 let mode = 'spline', clustering_mode = 'color', clustering_hierarchical = 'stacked';
 let wasmReady = false;
 let pendingRestart = false;
+let currentInputPath = '';
+let desktopConvertDebounce = null;
+let desktopRequestToken = 0;
+let desktopExportDir = '';
+let desktopStatusText = '';
+
+const tauriApi = createTauriApi();
+const isDesktopMode = tauriApi.isDesktop;
 
 init()
     .then(() => {
@@ -22,6 +30,10 @@ init()
     .catch((err) => {
         console.error('WASM init failed:', err);
     });
+
+if (isDesktopMode) {
+    initDesktopMode();
+}
 
 // Hide canas and svg on load
 canvas.style.display = 'none';
@@ -47,8 +59,15 @@ document.addEventListener('paste', function (e) {
     }
 });
 
-// Download as SVG
-document.getElementById('export').addEventListener('click', function (e) {
+// Download as SVG / desktop export
+document.getElementById('export').addEventListener('click', async function (e) {
+    if (isDesktopMode) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        await exportDesktopFile('svg');
+        return;
+    }
+
     const blob = new Blob([
         `<?xml version="1.0" encoding="UTF-8"?>\n`,
         `<!-- Generator: visioncortex VTracer -->\n`,
@@ -225,13 +244,19 @@ chooseGalleryButtons.forEach(item => {
 // Upload button
 var imageSelect = document.getElementById('imageSelect'),
 imageInput = document.getElementById('imageInput');  
-imageSelect.addEventListener('click', function (e) {
-    imageInput.click();
+imageSelect.addEventListener('click', async function (e) {
     e.preventDefault();
+    if (isDesktopMode) {
+        await pickDesktopImage();
+        return;
+    }
+    imageInput.click();
 });
 
 imageInput.addEventListener('change', function (e) {
-    setSourceAndRestart(this.files[0]);
+    const file = this.files[0];
+    const desktopPath = file && file.path ? file.path : '';
+    setSourceAndRestart(file, desktopPath);
 });
 
 // Drag-n-Drop
@@ -261,7 +286,9 @@ drop.addEventListener('dragover', function (e) {
 drop.addEventListener('drop', function (e) {
     if (e.preventDefault) e.preventDefault();
     droptext.classList.remove('hovering');
-    setSourceAndRestart(e.dataTransfer.files[0]);
+    const file = e.dataTransfer.files[0];
+    const desktopPath = file && file.path ? file.path : '';
+    setSourceAndRestart(file, desktopPath);
     return false;
 });
 
@@ -372,7 +399,19 @@ window.addEventListener('beforeunload', function () {
 });
 */
 
-function setSourceAndRestart(source) {
+function setSourceAndRestart(source, desktopPath = '') {
+    if (desktopPath && typeof desktopPath === 'string') {
+        currentInputPath = desktopPath;
+    } else if (source instanceof File && source.path) {
+        currentInputPath = source.path;
+    } else {
+        currentInputPath = '';
+    }
+
+    if (typeof source === 'string' && desktopPath) {
+        currentInputPath = desktopPath;
+    }
+
     img.src = source instanceof File ? URL.createObjectURL(source) : source;
     img.onload = function () {
         const width = img.naturalWidth, height = img.naturalHeight;
@@ -398,6 +437,12 @@ function setSourceAndRestart(source) {
 }
 
 function restart() {
+    if (desktopConvertDebounce) {
+        clearTimeout(desktopConvertDebounce);
+        desktopConvertDebounce = null;
+    }
+    desktopRequestToken++;
+
     if (!wasmReady) {
         pendingRestart = true;
         return;
@@ -425,6 +470,16 @@ function restart() {
     if (!img.src) {
         return;
     }
+
+    if (isDesktopMode && currentInputPath) {
+        if (runner) {
+            runner.stop();
+            runner = null;
+        }
+        scheduleDesktopRealtimeConvert();
+        return;
+    }
+
     while (svg.firstChild) {
         svg.removeChild(svg.firstChild);
     }
@@ -507,3 +562,313 @@ class ConverterRunner {
         this.converter.free();
     }
 }
+
+document.getElementById('exportPdf').addEventListener('click', async function (e) {
+    if (!isDesktopMode) {
+        return;
+    }
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    await exportDesktopFile('pdf');
+}, true);
+
+function createTauriApi() {
+    const tauriGlobal = window.__TAURI__ || {};
+    const core = tauriGlobal.core || {};
+    const windowApi = tauriGlobal.window || {};
+    const internals = window.__TAURI_INTERNALS__ || {};
+
+    const invoke = core.invoke || internals.invoke;
+    const convertFileSrc = core.convertFileSrc || internals.convertFileSrc;
+    const getCurrentWindow = windowApi.getCurrentWindow;
+    return {
+        isDesktop: typeof invoke === 'function',
+        invoke: invoke,
+        convertFileSrc: convertFileSrc,
+        getCurrentWindow: typeof getCurrentWindow === 'function' ? getCurrentWindow : null,
+    };
+}
+
+async function initDesktopMode() {
+    document.body.classList.add('desktop-window-mode');
+    try {
+        const result = await tauriApi.invoke('get_export_dir');
+        desktopExportDir = result.path || '';
+    } catch (err) {
+        console.error('failed to load export dir', err);
+    }
+    installDesktopControls();
+    installWindowControls();
+    registerDesktopE2EHelpers();
+}
+
+function installDesktopControls() {
+    const actionContainer = document.querySelector('.topbar-actions');
+    if (!actionContainer) {
+        return;
+    }
+    const button = document.createElement('button');
+    button.className = 'btn';
+    button.textContent = '导出目录';
+    button.addEventListener('click', async function () {
+        const next = window.prompt('设置导出目录（Windows 路径）', desktopExportDir || '');
+        if (next === null) {
+            return;
+        }
+        const trimmed = next.trim();
+        if (!trimmed) {
+            window.alert('导出目录不能为空');
+            return;
+        }
+        try {
+            await tauriApi.invoke('set_export_dir', { path: trimmed });
+            desktopExportDir = trimmed;
+            updateDesktopStatus();
+        } catch (err) {
+            const text = parseDesktopError(err, '设置导出目录失败');
+            window.alert(text);
+        }
+    });
+    actionContainer.appendChild(button);
+
+    const status = document.createElement('span');
+    status.id = 'desktopExportStatus';
+    status.style.cssText = 'font-size:11px;color:#7a8fa6;max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+    actionContainer.appendChild(status);
+    updateDesktopStatus();
+}
+
+function updateDesktopStatus() {
+    const status = document.getElementById('desktopExportStatus');
+    if (!status) {
+        return;
+    }
+    const value = desktopExportDir || '未设置';
+    const prefix = `导出目录: ${value}`;
+    status.textContent = desktopStatusText ? `${prefix} | ${desktopStatusText}` : prefix;
+    status.title = status.textContent;
+}
+
+function setDesktopStatus(text) {
+    desktopStatusText = text || '';
+    updateDesktopStatus();
+}
+
+async function pickDesktopImage() {
+    try {
+        const info = await tauriApi.invoke('pick_input_image');
+        if (!info || !info.path) {
+            return;
+        }
+        const source = desktopPathToSrc(info.path);
+        setSourceAndRestart(source, info.path);
+        setDesktopStatus(`已加载: ${info.path.split(/[\\\\/]/).pop()}`);
+    } catch (err) {
+        if (isDesktopCancelled(err)) {
+            return;
+        }
+        const text = parseDesktopError(err, '选择图片失败');
+        window.alert(text);
+    }
+}
+
+function scheduleDesktopRealtimeConvert() {
+    if (!currentInputPath) {
+        return;
+    }
+    if (desktopConvertDebounce) {
+        clearTimeout(desktopConvertDebounce);
+    }
+    const requestToken = ++desktopRequestToken;
+    progressregion.style.display = 'block';
+    progress.value = 15;
+    setDesktopStatus('转换中');
+
+    desktopConvertDebounce = setTimeout(async function () {
+        try {
+            try {
+                const cancelResult = await tauriApi.invoke('cancel_active_convert');
+                if (cancelResult && cancelResult.ok) {
+                    setDesktopStatus('已取消旧任务');
+                }
+            } catch (cancelErr) {
+                console.warn('cancel_active_convert failed', cancelErr);
+            }
+            const request = buildDesktopRequest();
+            const result = await tauriApi.invoke('convert_realtime', { request: request });
+            if (requestToken !== desktopRequestToken) {
+                return;
+            }
+            renderSvgText(result.svg_text);
+            progress.value = 100;
+            setDesktopStatus(`转换完成 ${result.meta && result.meta.duration_ms ? result.meta.duration_ms : 0}ms`);
+        } catch (err) {
+            if (requestToken !== desktopRequestToken) {
+                return;
+            }
+            if (isDesktopCancelled(err)) {
+                setDesktopStatus('已取消旧任务');
+                return;
+            }
+            const text = parseDesktopError(err, '实时转换失败');
+            setDesktopStatus(text);
+            console.error(text);
+        } finally {
+            if (requestToken === desktopRequestToken) {
+                progressregion.style.display = 'none';
+                progress.value = 0;
+            }
+        }
+    }, 300);
+}
+
+function renderSvgText(svgText) {
+    if (!svgText) {
+        return;
+    }
+    const parser = new DOMParser();
+    const parsed = parser.parseFromString(svgText, 'image/svg+xml');
+    const root = parsed.documentElement;
+    if (!root || root.nodeName.toLowerCase() !== 'svg') {
+        return;
+    }
+
+    const viewBox = root.getAttribute('viewBox');
+    if (viewBox) {
+        svg.setAttribute('viewBox', viewBox);
+    }
+    svg.innerHTML = root.innerHTML;
+    canvas.style.display = 'none';
+    canvas.style.opacity = 0;
+}
+
+function buildDesktopRequest() {
+    return {
+        input_path: currentInputPath,
+        params: {
+            mode: mode,
+            clustering_mode: clustering_mode,
+            hierarchical: clustering_hierarchical,
+            filter_speckle: globalfilterspeckle,
+            color_precision: globalcolorprecision,
+            layer_difference: globallayerdifference,
+            corner_threshold: globalcorner,
+            length_threshold: globallength,
+            max_iterations: 10,
+            splice_threshold: globalsplice,
+            path_precision: globalpathprecision,
+        },
+    };
+}
+
+async function exportDesktopFile(format) {
+    if (!currentInputPath) {
+        window.alert('请先选择本地图片');
+        return;
+    }
+    const request = buildDesktopRequest();
+    request.svg_text = new XMLSerializer().serializeToString(svg);
+
+    try {
+        const command = format === 'pdf' ? 'export_pdf' : 'export_svg';
+        const result = await tauriApi.invoke(command, { request: request });
+        const outPath = result && result.out_path ? result.out_path : '';
+        setDesktopStatus(`${format.toUpperCase()} 导出成功`);
+        console.info(`${format.toUpperCase()} exported: ${outPath}`);
+    } catch (err) {
+        const text = parseDesktopError(err, `${format.toUpperCase()} 导出失败`);
+        setDesktopStatus(text);
+        window.alert(text);
+    }
+}
+
+function installWindowControls() {
+    const controls = document.getElementById('desktopWindowControls');
+    const dragRegion = document.getElementById('titlebarDragRegion');
+    if (!controls || !dragRegion || !tauriApi.getCurrentWindow) {
+        return;
+    }
+
+    const currentWindow = tauriApi.getCurrentWindow();
+    const minBtn = document.getElementById('windowMinBtn');
+    const maxBtn = document.getElementById('windowMaxBtn');
+    const closeBtn = document.getElementById('windowCloseBtn');
+
+    if (minBtn) {
+        minBtn.addEventListener('click', () => currentWindow.minimize());
+    }
+    if (maxBtn) {
+        maxBtn.addEventListener('click', async () => {
+            if (typeof currentWindow.toggleMaximize === 'function') {
+                await currentWindow.toggleMaximize();
+            } else if (await currentWindow.isMaximized()) {
+                await currentWindow.unmaximize();
+            } else {
+                await currentWindow.maximize();
+            }
+        });
+    }
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => currentWindow.close());
+    }
+
+    dragRegion.addEventListener('dblclick', async () => {
+        if (typeof currentWindow.toggleMaximize === 'function') {
+            await currentWindow.toggleMaximize();
+        } else if (await currentWindow.isMaximized()) {
+            await currentWindow.unmaximize();
+        } else {
+            await currentWindow.maximize();
+        }
+    });
+}
+
+async function openDesktopImageByPath(path) {
+    const info = await tauriApi.invoke('test_open_image', { path: path });
+    const source = desktopPathToSrc(info.path);
+    setSourceAndRestart(source, info.path);
+    return info;
+}
+
+function registerDesktopE2EHelpers() {
+    if (!isDesktopMode) {
+        return;
+    }
+    window.__VTRACER_E2E = {
+        openImageByPath: async (path) => openDesktopImageByPath(path),
+        getLastExportPath: async () => tauriApi.invoke('test_get_last_export_path'),
+        cancelActiveConvert: async () => tauriApi.invoke('cancel_active_convert'),
+        getStatusText: () => desktopStatusText,
+    };
+}
+
+function desktopPathToSrc(path) {
+    if (tauriApi.convertFileSrc) {
+        return tauriApi.convertFileSrc(path);
+    }
+    const normalized = path.replace(/\\/g, '/');
+    return encodeURI(`file:///${normalized}`);
+}
+
+function parseDesktopError(err, fallback) {
+    if (err && typeof err === 'object') {
+        const code = err.code ? `[${err.code}] ` : '';
+        const message = err.message || fallback;
+        return `${code}${message}`;
+    }
+    if (typeof err === 'string') {
+        return err;
+    }
+    return fallback;
+}
+
+function isDesktopCancelled(err) {
+    if (err && typeof err === 'object' && err.code === 'CANCELLED') {
+        return true;
+    }
+    if (typeof err === 'string' && err.includes('CANCELLED')) {
+        return true;
+    }
+    return false;
+}
+

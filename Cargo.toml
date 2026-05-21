@@ -4,4 +4,7 @@ members = [
     "cmdapp",
     "webapp",
 ]
+exclude = [
+    "desktopapp/src-tauri",
+]
 resolver = "2"

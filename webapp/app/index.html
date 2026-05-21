@@ -74,6 +74,38 @@ body::after {
     border: 1px solid var(--border); padding: 2px 8px; border-radius: 3px; letter-spacing: 1px;
 }
 .topbar-actions { display: flex; align-items: center; gap: 12px; }
+.desktop-window-controls {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    margin-left: 8px;
+}
+.desktop-window-controls .window-btn {
+    width: 30px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+}
+.desktop-window-controls .window-btn:hover {
+    border-color: var(--cyan);
+    color: var(--cyan);
+}
+.desktop-window-controls .window-btn.close-btn:hover {
+    border-color: #ff6f61;
+    color: #ff6f61;
+}
+body.desktop-window-mode .desktop-window-controls {
+    display: inline-flex;
+}
+body.desktop-window-mode .topbar {
+    border-top: 1px solid var(--border);
+}
 .btn {
     font-family: 'Noto Sans SC', sans-serif; font-size: 13px; font-weight: 500;
     padding: 8px 18px; border-radius: var(--radius); border: 1px solid var(--border);
@@ -204,7 +236,7 @@ body::after {
 
 <!-- Top Bar -->
 <div class="topbar">
-    <div class="brand">
+    <div class="brand" id="titlebarDragRegion" data-tauri-drag-region="true">
         <span class="brand-name">VTRACER</span>
         <span class="brand-tag">v0.6 矢量引擎</span>
     </div>
@@ -221,6 +253,11 @@ body::after {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
             导出 PDF
         </a>
+        <div id="desktopWindowControls" class="desktop-window-controls">
+            <button id="windowMinBtn" class="window-btn" type="button" title="最小化">−</button>
+            <button id="windowMaxBtn" class="window-btn" type="button" title="最大化/还原">□</button>
+            <button id="windowCloseBtn" class="window-btn close-btn" type="button" title="关闭">×</button>
+        </div>
     </div>
 </div>
 

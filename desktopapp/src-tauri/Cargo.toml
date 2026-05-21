@@ -1,0 +1,24 @@
+[package]
+name = "vtracer-desktop"
+version = "0.1.0"
+description = "VTracer desktop application (Tauri)"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+chrono = { version = "0.4", default-features = true }
+dirs = "5"
+image = "0.23.10"
+rfd = "0.15"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+svg2pdf = "0.11"
+tauri = { version = "2", features = [] }
+visioncortex = "0.8.8"
+vtracer = { path = "../../cmdapp" }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

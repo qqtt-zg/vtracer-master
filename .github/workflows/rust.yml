@@ -42,3 +42,111 @@ jobs:
         run: npm run e2e:install-browser
       - name: Run E2E smoke test
         run: npm run test:e2e
+
+  desktop-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: webapp/app/package-lock.json
+      - name: Install webapp dependencies
+        working-directory: webapp/app
+        run: npm ci
+      - name: Build webapp dist
+        working-directory: webapp/app
+        run: npm run build
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0" --locked
+      - name: Run desktop command tests
+        run: cargo test --manifest-path desktopapp/src-tauri/Cargo.toml --verbose
+      - name: Build desktop debug app
+        run: cargo build --manifest-path desktopapp/src-tauri/Cargo.toml --verbose
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --locked
+      - name: Install msedgedriver-tool
+        run: cargo install --git https://github.com/chippers/msedgedriver-tool
+      - name: Download matching msedgedriver
+        shell: pwsh
+        run: |
+          & "$env:USERPROFILE\.cargo\bin\msedgedriver-tool.exe"
+          $driver = Get-ChildItem -Path $env:GITHUB_WORKSPACE -Recurse -Filter msedgedriver.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $driver) { throw "msedgedriver.exe not found" }
+          "NATIVE_DRIVER_PATH=$($driver.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PATH=$($driver.DirectoryName);$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Install desktop e2e dependencies
+        working-directory: desktopapp/e2e
+        run: npm ci
+      - name: Run raw HTTP session probe
+        working-directory: desktopapp/e2e
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          powershell -ExecutionPolicy Bypass -File .\http-session-probe.ps1 `
+            -TauriDriverPath "$env:USERPROFILE\.cargo\bin\tauri-driver.exe" `
+            -NativeDriverPath "$env:NATIVE_DRIVER_PATH" `
+            -AppPath "$env:GITHUB_WORKSPACE\desktopapp\src-tauri\target\debug\vtracer-desktop.exe" `
+            -OutputDir "$env:GITHUB_WORKSPACE\desktopapp\e2e\.artifacts\logs"
+      - name: Run desktop session preflight
+        working-directory: desktopapp/e2e
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $env:TAURI_DRIVER_PATH="$env:USERPROFILE\.cargo\bin\tauri-driver.exe"
+          $env:NATIVE_DRIVER_PATH="$env:NATIVE_DRIVER_PATH"
+          npm run test:session-preflight
+      - name: Run desktop e2e
+        working-directory: desktopapp/e2e
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $env:TAURI_DRIVER_PATH="$env:USERPROFILE\.cargo\bin\tauri-driver.exe"
+          $env:NATIVE_DRIVER_PATH="$env:NATIVE_DRIVER_PATH"
+          npm test
+      - name: Collect desktop e2e diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          $diagDir = "desktopapp/e2e/.artifacts/ci-diagnostics"
+          New-Item -ItemType Directory -Force -Path $diagDir | Out-Null
+
+          "== timestamp ==" | Out-File -FilePath "$diagDir/summary.txt" -Encoding utf8
+          (Get-Date -Format o) | Out-File -FilePath "$diagDir/summary.txt" -Encoding utf8 -Append
+          "" | Out-File -FilePath "$diagDir/summary.txt" -Encoding utf8 -Append
+          "== env ==" | Out-File -FilePath "$diagDir/summary.txt" -Encoding utf8 -Append
+          "TAURI_DRIVER_PATH=$env:TAURI_DRIVER_PATH" | Out-File -FilePath "$diagDir/summary.txt" -Encoding utf8 -Append
+          "NATIVE_DRIVER_PATH=$env:NATIVE_DRIVER_PATH" | Out-File -FilePath "$diagDir/summary.txt" -Encoding utf8 -Append
+
+          "== where tauri-driver ==" | Out-File -FilePath "$diagDir/where-tauri-driver.txt" -Encoding utf8
+          $tauriCmd = Get-Command tauri-driver -ErrorAction SilentlyContinue
+          if ($tauriCmd) { $tauriCmd.Source | Out-File -FilePath "$diagDir/where-tauri-driver.txt" -Encoding utf8 -Append } else { "not found" | Out-File -FilePath "$diagDir/where-tauri-driver.txt" -Encoding utf8 -Append }
+          "== where msedgedriver ==" | Out-File -FilePath "$diagDir/where-msedgedriver.txt" -Encoding utf8
+          $edgeCmd = Get-Command msedgedriver -ErrorAction SilentlyContinue
+          if ($edgeCmd) { $edgeCmd.Source | Out-File -FilePath "$diagDir/where-msedgedriver.txt" -Encoding utf8 -Append } else { "not found" | Out-File -FilePath "$diagDir/where-msedgedriver.txt" -Encoding utf8 -Append }
+
+          "== tauri-driver version ==" | Out-File -FilePath "$diagDir/driver-versions.txt" -Encoding utf8
+          if (Test-Path "$env:USERPROFILE\.cargo\bin\tauri-driver.exe") {
+            & "$env:USERPROFILE\.cargo\bin\tauri-driver.exe" --help | Out-File -FilePath "$diagDir/driver-versions.txt" -Encoding utf8 -Append
+          } else {
+            "tauri-driver.exe missing" | Out-File -FilePath "$diagDir/driver-versions.txt" -Encoding utf8 -Append
+          }
+          if (Test-Path $env:NATIVE_DRIVER_PATH) {
+            & $env:NATIVE_DRIVER_PATH --version | Out-File -FilePath "$diagDir/driver-versions.txt" -Encoding utf8 -Append
+          } else {
+            "native driver missing: $env:NATIVE_DRIVER_PATH" | Out-File -FilePath "$diagDir/driver-versions.txt" -Encoding utf8 -Append
+          }
+
+          netstat -ano | Out-File -FilePath "$diagDir/netstat-ano.txt" -Encoding utf8
+          (tasklist /v | Select-String -Pattern "tauri-driver|msedgedriver|vtracer-desktop") | Out-File -FilePath "$diagDir/tasklist-filtered.txt" -Encoding utf8
+      - name: Upload desktop e2e logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-e2e-logs
+          path: desktopapp/e2e/.artifacts
+          if-no-files-found: ignore
+      - name: Build desktop app (Windows)
+        working-directory: desktopapp/src-tauri
+        run: cargo tauri build --ci
