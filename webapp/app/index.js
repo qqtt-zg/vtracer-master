@@ -16,6 +16,32 @@ let desktopRequestToken = 0;
 let desktopExportDir = '';
 let desktopStatusText = '';
 
+let progressShowTime = 0;
+let progressDisplayToken = 0;
+
+function showProgress() {
+    progressregion.style.display = 'block';
+    progressShowTime = performance.now();
+    return ++progressDisplayToken;
+}
+
+function hideProgress(token) {
+    if (token !== progressDisplayToken) return;
+    const elapsed = performance.now() - progressShowTime;
+    const delay = Math.max(0, 1000 - elapsed);
+    if (delay > 0) {
+        setTimeout(() => {
+            if (token === progressDisplayToken) {
+                progressregion.style.display = 'none';
+                progress.value = 0;
+            }
+        }, delay);
+    } else {
+        progressregion.style.display = 'none';
+        progress.value = 0;
+    }
+}
+
 const tauriApi = createTauriApi();
 const isDesktopMode = tauriApi.isDesktop;
 
@@ -99,7 +125,7 @@ var presetConfigs = [
         credit: '<a href="https://commons.wikimedia.org/">Wikimedia</a>',
     },
     {
-        src: 'assets/samples/Cityscape Sunset_DFM3-01.jpg',
+        src: 'assets/samples/Cityscape_Sunset_DFM3-01.jpg',
         clustering_mode: 'color',
         clustering_hierarchical: 'stacked',
         filter_speckle: 4,
@@ -114,7 +140,7 @@ var presetConfigs = [
         credit: '<a href="https://www.vecteezy.com/free-vector/building">Building Vectors by Vecteezy</a>',
     },
     {
-        src: 'assets/samples/Gum Tree Vector.jpg',
+        src: 'assets/samples/Gum_Tree_Vector.jpg',
         clustering_mode: 'color',
         clustering_hierarchical: 'stacked',
         filter_speckle: 4,
@@ -505,7 +531,7 @@ function restart() {
     }
     runner = new ConverterRunner(converter_params);
     progress.value = 0;
-    progressregion.style.display = 'block';
+    runner.progressToken = showProgress();
     runner.run();
 }
 
@@ -547,8 +573,7 @@ class ConverterRunner {
                     canvas.style.opacity = (50 - progress.value) / 25;
                 }
                 if (progress.value >= progress.max) {
-                    progressregion.style.display = 'none';
-                    progress.value = 0;
+                    hideProgress(This.progressToken);
                 }
                 if (!done) {
                     setTimeout(tick, 1);
@@ -608,45 +633,30 @@ function installDesktopControls() {
         return;
     }
     const button = document.createElement('button');
-    button.className = 'btn';
-    button.textContent = 'µ¼³öÄ¿Â¼';
+    button.className = 'btn btn-primary';
+    button.textContent = 'å¯¼å‡ºç›®å½•';
     button.addEventListener('click', async function () {
-        const next = window.prompt('ÉèÖÃµ¼³öÄ¿Â¼£¨Windows Â·¾¶£©', desktopExportDir || '');
-        if (next === null) {
-            return;
-        }
-        const trimmed = next.trim();
-        if (!trimmed) {
-            window.alert('µ¼³öÄ¿Â¼²»ÄÜÎª¿Õ');
-            return;
-        }
         try {
-            await tauriApi.invoke('set_export_dir', { path: trimmed });
-            desktopExportDir = trimmed;
-            updateDesktopStatus();
+            await tauriApi.invoke('pick_export_dir');
         } catch (err) {
-            const text = parseDesktopError(err, 'ÉèÖÃµ¼³öÄ¿Â¼Ê§°Ü');
+            if (isDesktopCancelled(err)) {
+                return;
+            }
+            const text = parseDesktopError(err, 'é€‰æ‹©å¯¼å‡ºç›®å½•å¤±è´¥');
             window.alert(text);
         }
     });
-    actionContainer.appendChild(button);
 
-    const status = document.createElement('span');
-    status.id = 'desktopExportStatus';
-    status.style.cssText = 'font-size:11px;color:#7a8fa6;max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-    actionContainer.appendChild(status);
-    updateDesktopStatus();
+    const windowControls = document.getElementById('desktopWindowControls');
+    if (windowControls) {
+        actionContainer.insertBefore(button, windowControls);
+    } else {
+        actionContainer.appendChild(button);
+    }
 }
 
 function updateDesktopStatus() {
-    const status = document.getElementById('desktopExportStatus');
-    if (!status) {
-        return;
-    }
-    const value = desktopExportDir || 'Î´ÉèÖÃ';
-    const prefix = `µ¼³öÄ¿Â¼: ${value}`;
-    status.textContent = desktopStatusText ? `${prefix} | ${desktopStatusText}` : prefix;
-    status.title = status.textContent;
+    // éšè—çŠ¶æ€æ–‡æœ¬ï¼Œä¸å†ä½¿ç”¨
 }
 
 function setDesktopStatus(text) {
@@ -662,12 +672,12 @@ async function pickDesktopImage() {
         }
         const source = desktopPathToSrc(info.path);
         setSourceAndRestart(source, info.path);
-        setDesktopStatus(`ÒÑ¼ÓÔØ: ${info.path.split(/[\\\\/]/).pop()}`);
+        setDesktopStatus(`å·²åŠ è½½: ${info.path.split(/[\\\\/]/).pop()}`);
     } catch (err) {
         if (isDesktopCancelled(err)) {
             return;
         }
-        const text = parseDesktopError(err, 'Ñ¡ÔñÍ¼Æ¬Ê§°Ü');
+        const text = parseDesktopError(err, 'é€‰æ‹©å›¾ç‰‡å¤±è´¥');
         window.alert(text);
     }
 }
@@ -680,16 +690,16 @@ function scheduleDesktopRealtimeConvert() {
         clearTimeout(desktopConvertDebounce);
     }
     const requestToken = ++desktopRequestToken;
-    progressregion.style.display = 'block';
+    const pToken = showProgress();
     progress.value = 15;
-    setDesktopStatus('×ª»»ÖÐ');
+    setDesktopStatus('è½¬æ¢ä¸­');
 
     desktopConvertDebounce = setTimeout(async function () {
         try {
             try {
                 const cancelResult = await tauriApi.invoke('cancel_active_convert');
                 if (cancelResult && cancelResult.ok) {
-                    setDesktopStatus('ÒÑÈ¡Ïû¾ÉÈÎÎñ');
+                    setDesktopStatus('å·²å–æ¶ˆæ—§ä»»åŠ¡');
                 }
             } catch (cancelErr) {
                 console.warn('cancel_active_convert failed', cancelErr);
@@ -701,22 +711,21 @@ function scheduleDesktopRealtimeConvert() {
             }
             renderSvgText(result.svg_text);
             progress.value = 100;
-            setDesktopStatus(`×ª»»Íê³É ${result.meta && result.meta.duration_ms ? result.meta.duration_ms : 0}ms`);
+            setDesktopStatus(`è½¬æ¢å®Œæˆ ${result.meta && result.meta.duration_ms ? result.meta.duration_ms : 0}ms`);
         } catch (err) {
             if (requestToken !== desktopRequestToken) {
                 return;
             }
             if (isDesktopCancelled(err)) {
-                setDesktopStatus('ÒÑÈ¡Ïû¾ÉÈÎÎñ');
+                setDesktopStatus('å·²å–æ¶ˆæ—§ä»»åŠ¡');
                 return;
             }
-            const text = parseDesktopError(err, 'ÊµÊ±×ª»»Ê§°Ü');
+            const text = parseDesktopError(err, 'å®žæ—¶è½¬æ¢å¤±è´¥');
             setDesktopStatus(text);
             console.error(text);
         } finally {
             if (requestToken === desktopRequestToken) {
-                progressregion.style.display = 'none';
-                progress.value = 0;
+                hideProgress(pToken);
             }
         }
     }, 300);
@@ -762,66 +771,76 @@ function buildDesktopRequest() {
 }
 
 async function exportDesktopFile(format) {
-    if (!currentInputPath) {
-        window.alert('ÇëÏÈÑ¡Ôñ±¾µØÍ¼Æ¬');
+    if (!img.src) {
+        window.alert('è¯·å…ˆé€‰æ‹©æˆ–åŠ è½½ä¸€å¼ å›¾ç‰‡');
         return;
     }
     const request = buildDesktopRequest();
     request.svg_text = new XMLSerializer().serializeToString(svg);
 
+    const pToken = showProgress();
+    progress.value = 0;
+    setDesktopStatus(`${format.toUpperCase()} å¯¼å‡ºä¸­...`);
+
+    let simulatedProgress = 0;
+    const interval = setInterval(() => {
+        if (progressDisplayToken === pToken) {
+            simulatedProgress += (100 - simulatedProgress) * 0.15;
+            progress.value = simulatedProgress;
+        }
+    }, 50);
+
     try {
         const command = format === 'pdf' ? 'export_pdf' : 'export_svg';
         const result = await tauriApi.invoke(command, { request: request });
         const outPath = result && result.out_path ? result.out_path : '';
-        setDesktopStatus(`${format.toUpperCase()} µ¼³ö³É¹¦`);
+        setDesktopStatus(`${format.toUpperCase()} å¯¼å‡ºæˆåŠŸ`);
         console.info(`${format.toUpperCase()} exported: ${outPath}`);
+        if (progressDisplayToken === pToken) progress.value = 100;
     } catch (err) {
-        const text = parseDesktopError(err, `${format.toUpperCase()} µ¼³öÊ§°Ü`);
+        const text = parseDesktopError(err, `${format.toUpperCase()} å¯¼å‡ºå¤±è´¥`);
         setDesktopStatus(text);
         window.alert(text);
+    } finally {
+        clearInterval(interval);
+        hideProgress(pToken);
     }
 }
 
 function installWindowControls() {
     const controls = document.getElementById('desktopWindowControls');
     const dragRegion = document.getElementById('titlebarDragRegion');
-    if (!controls || !dragRegion || !tauriApi.getCurrentWindow) {
+    if (!controls || !dragRegion) {
         return;
     }
 
-    const currentWindow = tauriApi.getCurrentWindow();
     const minBtn = document.getElementById('windowMinBtn');
     const maxBtn = document.getElementById('windowMaxBtn');
     const closeBtn = document.getElementById('windowCloseBtn');
 
     if (minBtn) {
-        minBtn.addEventListener('click', () => currentWindow.minimize());
+        minBtn.addEventListener('click', () => tauriApi.invoke('minimize_window'));
     }
     if (maxBtn) {
-        maxBtn.addEventListener('click', async () => {
-            if (typeof currentWindow.toggleMaximize === 'function') {
-                await currentWindow.toggleMaximize();
-            } else if (await currentWindow.isMaximized()) {
-                await currentWindow.unmaximize();
-            } else {
-                await currentWindow.maximize();
-            }
-        });
+        maxBtn.addEventListener('click', () => tauriApi.invoke('maximize_window'));
     }
     if (closeBtn) {
-        closeBtn.addEventListener('click', () => currentWindow.close());
+        closeBtn.addEventListener('click', () => tauriApi.invoke('close_window'));
     }
 
-    dragRegion.addEventListener('dblclick', async () => {
-        if (typeof currentWindow.toggleMaximize === 'function') {
-            await currentWindow.toggleMaximize();
-        } else if (await currentWindow.isMaximized()) {
-            await currentWindow.unmaximize();
-        } else {
-            await currentWindow.maximize();
+    dragRegion.addEventListener('dblclick', () => tauriApi.invoke('maximize_window'));
+
+    dragRegion.addEventListener('mousedown', (e) => {
+        if (e.target.closest('button, a, input, [data-tauri-drag-region="false"]')) {
+            return;
+        }
+        if (e.buttons === 1) {
+            tauriApi.invoke('drag_window').catch(() => {});
         }
     });
 }
+
+
 
 async function openDesktopImageByPath(path) {
     const info = await tauriApi.invoke('test_open_image', { path: path });

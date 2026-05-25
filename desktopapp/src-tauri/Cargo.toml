@@ -1,4 +1,4 @@
-﻿[package]
+[package]
 name = "vtracer-desktop"
 version = "0.1.0"
 description = "VTracer desktop application (Tauri)"

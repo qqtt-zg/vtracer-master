@@ -332,6 +332,17 @@ fn set_export_dir(path: String, state: tauri::State<'_, AppState>) -> Result<Exp
 }
 
 #[tauri::command]
+fn pick_export_dir(state: tauri::State<'_, AppState>) -> Result<ExportDirPath, AppError> {
+    let folder = rfd::FileDialog::new()
+        .pick_folder()
+        .ok_or_else(|| AppError::new("CANCELLED", "no folder selected"))?;
+    state.set_export_dir(folder.clone())?;
+    Ok(ExportDirPath {
+        path: path_to_string(&folder)?,
+    })
+}
+
+#[tauri::command]
 fn get_export_dir(state: tauri::State<'_, AppState>) -> Result<ExportDirPath, AppError> {
     let dir = state.get_export_dir()?;
     Ok(ExportDirPath {
@@ -800,6 +811,30 @@ fn find_arg_value(args: &[String], key: &str) -> Option<String> {
         .map(|window| window[1].to_string())
 }
 
+#[tauri::command]
+fn minimize_window(window: tauri::WebviewWindow) {
+    let _ = window.minimize();
+}
+
+#[tauri::command]
+fn maximize_window(window: tauri::WebviewWindow) {
+    if window.is_maximized().unwrap_or(false) {
+        let _ = window.unmaximize();
+    } else {
+        let _ = window.maximize();
+    }
+}
+
+#[tauri::command]
+fn close_window(window: tauri::WebviewWindow) {
+    let _ = window.close();
+}
+
+#[tauri::command]
+fn drag_window(window: tauri::WebviewWindow) {
+    let _ = window.start_dragging();
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|arg| arg == WORKER_ARG) {
@@ -810,6 +845,27 @@ fn main() {
         .setup(|app| {
             let state = AppState::load(app.handle()).map_err(|e| e.message)?;
             app.manage(state);
+
+            if let Some(window) = app.get_webview_window("main") {
+                if let Ok(Some(monitor)) = window.current_monitor() {
+                    let size = monitor.size();
+                    let target_width = (size.width as f64 * 0.8) as u32;
+                    let target_height = (size.height as f64 * 0.8) as u32;
+                    let min_width = 1120;
+                    let min_height = 720;
+                    
+                    let final_width = target_width.max(min_width).min(size.width);
+                    let final_height = target_height.max(min_height).min(size.height);
+                    
+                    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
+                        width: final_width,
+                        height: final_height,
+                    }));
+                    let _ = window.center();
+                    let _ = window.maximize();
+                }
+            }
+
             if std::env::var("VTRACER_USE_SYSTEM_FRAME").ok().as_deref() == Some("1") {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.set_decorations(true);
@@ -820,13 +876,18 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             pick_input_image,
             set_export_dir,
+            pick_export_dir,
             get_export_dir,
             convert_realtime,
             export_svg,
             export_pdf,
             cancel_active_convert,
             test_open_image,
-            test_get_last_export_path
+            test_get_last_export_path,
+            minimize_window,
+            maximize_window,
+            close_window,
+            drag_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

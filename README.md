@@ -1,4 +1,4 @@
-﻿<div align="center">
+<div align="center">
 
   <img src="docs/images/visioncortex-banner.png">
   <h1>VTracer</h1>
@@ -40,6 +40,73 @@ Web 发布流程说明：
 - 前端源码目录：`webapp/app`
 - 发布产物目录：`docs`（由构建同步生成，不直接手改业务逻辑）
 - 一键构建同步命令：`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-sync-web-docs.ps1`
+
+## 启动与本地开发
+
+该项目包含三个子模块，您可以根据需要启动或调试不同的端：
+
+### 1. Web 应用 (Web App)
+
+#### 方案 A：一键极速启动（使用 Python 静态服务器预览已构建产物）
+如果您只需本地运行或预览 Web App，且本地已包含构建产物（`webapp/app/dist`），可以直接使用以下一键脚本：
+- **启动服务**：双击运行根目录下的 `start-vtracer-ui.bat`，或者在 PowerShell 中执行：
+  ```powershell
+  powershell -NoProfile -ExecutionPolicy Bypass -File .\vtracer-ui.ps1 -Mode Launch
+  ```
+  该脚本会启动一个运行在 `18180` 端口的 Python HTTP 服务器，并自动打开默认浏览器访问 `http://localhost:18180/index.html`。
+- **停止服务**：双击运行根目录下的 `stop-vtracer-ui.bat`，或者在 PowerShell 中执行：
+  ```powershell
+  powershell -NoProfile -ExecutionPolicy Bypass -File .\vtracer-ui.ps1 -Mode Stop
+  ```
+
+#### 方案 B：热更新开发启动（Web 前端开发模式）
+如果您需要修改前端代码并实时预览（基于 webpack-dev-server）：
+1. **构建 Rust WASM 依赖**（首次或修改 Rust 核心后执行）：
+   ```sh
+   cd webapp
+   wasm-pack build --target web
+   ```
+2. **启动本地开发服务器**：
+   ```sh
+   cd app
+   npm run start
+   ```
+   随后可访问 `http://localhost:8080` 进行热更新开发。
+
+#### 方案 C：一键构建并同步到展示页 (docs)
+一键在本地重新构建 Rust WASM 和前端静态资源，并将最新构建产物同步更新到 `docs` 目录（用于 GitHub Pages 托管发布）：
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-sync-web-docs.ps1
+```
+
+---
+
+### 2. 桌面客户端 (Desktop App / Tauri)
+
+桌面端基于 Tauri 构建，依赖 `webapp/app/dist` 的前端静态产物。
+
+- **启动桌面端调试**（默认会自动先构建 webapp dist）：
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\desktopapp\scripts\dev.ps1
+  ```
+- **启动桌面端调试（跳过前端构建）**：
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\desktopapp\scripts\dev.ps1 -SkipWebBuild
+  ```
+- **构建/打包 Windows 安装包**：
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\desktopapp\scripts\build.ps1
+  ```
+
+---
+
+### 3. 命令行工具 (Cmd App)
+
+- **直接运行命令行工具**：
+  ```sh
+  cargo run --manifest-path cmdapp/Cargo.toml -- --input <input_path> --output <output_path>
+  ```
+
 
 ## 桌面 E2E 门禁策略（并行双链路）
 

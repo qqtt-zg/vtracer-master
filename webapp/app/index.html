@@ -72,33 +72,38 @@ body::after {
 .brand-tag {
     font-size: 11px; color: var(--text-dim);
     border: 1px solid var(--border); padding: 2px 8px; border-radius: 3px; letter-spacing: 1px;
+    white-space: nowrap; flex-shrink: 0;
 }
-.topbar-actions { display: flex; align-items: center; gap: 12px; }
+.topbar-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 1; min-width: 0; }
 .desktop-window-controls {
     display: none;
     align-items: center;
     gap: 6px;
     margin-left: 8px;
+    flex-shrink: 0;
 }
 .desktop-window-controls .window-btn {
-    width: 30px;
-    height: 26px;
+    width: 34px;
+    height: 34px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--border);
+    border: 1px solid var(--cyan);
     border-radius: 4px;
-    background: transparent;
-    color: var(--text);
+    background: linear-gradient(135deg, rgba(0,229,255,0.15), rgba(0,229,255,0.05));
+    color: var(--cyan);
     cursor: pointer;
+    box-sizing: border-box;
 }
 .desktop-window-controls .window-btn:hover {
-    border-color: var(--cyan);
-    color: var(--cyan);
+    background: linear-gradient(135deg, rgba(0,229,255,0.3), rgba(0,229,255,0.1));
+    box-shadow: 0 0 20px var(--cyan-dim), inset 0 0 20px var(--cyan-dim);
 }
 .desktop-window-controls .window-btn.close-btn:hover {
+    background: linear-gradient(135deg, rgba(255,111,97,0.3), rgba(255,111,97,0.1));
     border-color: #ff6f61;
     color: #ff6f61;
+    box-shadow: 0 0 20px rgba(255,111,97,0.2), inset 0 0 20px rgba(255,111,97,0.2);
 }
 body.desktop-window-mode .desktop-window-controls {
     display: inline-flex;
@@ -108,9 +113,10 @@ body.desktop-window-mode .topbar {
 }
 .btn {
     font-family: 'Noto Sans SC', sans-serif; font-size: 13px; font-weight: 500;
-    padding: 8px 18px; border-radius: var(--radius); border: 1px solid var(--border);
+    padding: 0 18px; height: 34px; border-radius: var(--radius); border: 1px solid var(--border);
     background: transparent; color: var(--text); cursor: pointer; transition: all 0.2s;
-    text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+    text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    white-space: nowrap; flex-shrink: 0; box-sizing: border-box;
 }
 .btn:hover { border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 12px var(--cyan-dim); }
 .btn-primary {
@@ -168,13 +174,7 @@ body.desktop-window-mode .topbar {
     -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
     background: var(--cyan); box-shadow: 0 0 8px var(--cyan-glow); cursor: pointer;
 }
-.progress-ring { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 100; display: none; }
-.progress-ring.active { display: block; }
-.progress-ring svg { transform: rotate(-90deg); }
-.progress-ring circle { fill: none; stroke-width: 4; }
-.progress-ring .track { stroke: var(--border); }
-.progress-ring .fill { stroke: var(--cyan); stroke-linecap: round; transition: stroke-dashoffset 0.3s; filter: drop-shadow(0 0 6px var(--cyan-glow)); }
-.progress-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-family: 'Orbitron', sans-serif; font-size: 14px; color: var(--cyan); }
+
 .panel {
     width: 280px; flex-shrink: 0; background: var(--bg-panel); border-left: 1px solid var(--border);
     overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; position: relative; z-index: 10;
@@ -230,18 +230,53 @@ body.desktop-window-mode .topbar {
 }
 .gallery-item:hover { border-color: var(--cyan); box-shadow: 0 0 12px var(--cyan-dim); transform: translateY(-2px); }
 .gallery-item img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Progress Bar - Minimalist Line Style */
+#progressregion {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    z-index: 1000;
+}
+progress#progressbar {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    width: 100%;
+    height: 100%;
+    border: none;
+    border-radius: 0;
+    background: rgba(0, 229, 255, 0.1);
+    overflow: hidden;
+    display: block;
+}
+progress#progressbar::-webkit-progress-bar {
+    background: transparent;
+}
+progress#progressbar::-webkit-progress-value {
+    background: linear-gradient(90deg, rgba(0, 229, 255, 0) 0%, var(--cyan) 100%);
+    box-shadow: 2px 0 8px var(--cyan-glow);
+    transition: width 0.15s ease-out;
+}
+progress#progressbar::-moz-progress-bar {
+    background: linear-gradient(90deg, rgba(0, 229, 255, 0) 0%, var(--cyan) 100%);
+    box-shadow: 2px 0 8px var(--cyan-glow);
+    transition: width 0.15s ease-out;
+}
 </style>
 
 <input type="file" id="imageInput" accept="image/*" style="display:none">
 
 <!-- Top Bar -->
-<div class="topbar">
-    <div class="brand" id="titlebarDragRegion" data-tauri-drag-region="true">
+<div class="topbar" id="titlebarDragRegion" data-tauri-drag-region="true">
+    <div class="brand">
         <span class="brand-name">VTRACER</span>
         <span class="brand-tag">v0.6 矢量引擎</span>
     </div>
-    <div class="topbar-actions">
-        <a class="btn" href="https://github.com/visioncortex/vtracer" target="_blank">
+    <div class="topbar-actions" data-tauri-drag-region="false">
+        <a class="btn btn-primary" href="https://github.com/visioncortex/vtracer" target="_blank">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
             GitHub
         </a>
@@ -279,14 +314,7 @@ body.desktop-window-mode .topbar {
                 </div>
                 <p class="dropzone-text">拖拽图片到此处，Ctrl+V 粘贴，或 <a href="#" id="imageSelect">选择文件</a></p>
             </div>
-            <!-- Progress Ring -->
-            <div class="progress-ring" id="progressRing">
-                <svg width="80" height="80">
-                    <circle class="track" cx="40" cy="40" r="34"/>
-                    <circle class="fill" id="progressCircle" cx="40" cy="40" r="34" stroke-dasharray="213.6" stroke-dashoffset="213.6"/>
-                </svg>
-                <span class="progress-text" id="progressText">0%</span>
-            </div>
+
         </div>
         <!-- Hidden progress bar for compatibility -->
         <div id="progressregion" style="display:none"><progress id="progressbar" value="0" max="100"></progress></div>
@@ -440,10 +468,6 @@ var globalContrast = 0;
     const content = document.getElementById('viewportContent');
     const zoomSlider = document.getElementById('zoomSlider');
     const zoomPercent = document.getElementById('zoomPercent');
-    const progressRing = document.getElementById('progressRing');
-    const progressCircle = document.getElementById('progressCircle');
-    const progressTextEl = document.getElementById('progressText');
-    const circumference = 2 * Math.PI * 34;
 
     function updateTransform() {
         content.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
@@ -576,27 +600,7 @@ var globalContrast = 0;
         }
     });
 
-    // Progress ring - poll the hidden progressbar
-    const progressbar = document.getElementById('progressbar');
-    const progressregion = document.getElementById('progressregion');
-    let lastProgressVal = -1;
-    setInterval(function() {
-        const val = progressbar.value;
-        const max = progressbar.max;
-        const visible = progressregion.style.display !== 'none';
-        if (val !== lastProgressVal || visible !== progressRing.classList.contains('active')) {
-            lastProgressVal = val;
-            const pct = Math.round((val / max) * 100);
-            const offset = circumference - (val / max) * circumference;
-            progressCircle.style.strokeDashoffset = offset;
-            progressTextEl.textContent = pct + '%';
-            if (visible) {
-                progressRing.classList.add('active');
-            } else {
-                progressRing.classList.remove('active');
-            }
-        }
-    }, 50);
+
 
     // Style gallery items injected by the bundle
     const galleryObserver = new MutationObserver(function() {
