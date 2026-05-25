@@ -3,3 +3,24 @@ Cargo.lock
 *.sublime*
 .vscode
 vtracer-ui-launch.log
+.claude
+.claude-flow
+
+# 缓存与依赖
+.npm-cache/
+node_modules/
+
+# 浏览器驱动与二进制文件
+*.exe
+msedgedriver.exe
+
+# 运行日志与临时文件
+*.log
+.tmp-*
+
+# 本地草稿与临时输出
+scratch/
+output_*.svg
+*.db
+
+
